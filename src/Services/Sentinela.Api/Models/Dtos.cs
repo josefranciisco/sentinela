@@ -242,6 +242,7 @@ public class ScreenCaptureRequestDto
 {
     public Guid ComputerId { get; set; }
     public string Reason { get; set; } = string.Empty;
+    public bool CaptureAllMonitors { get; set; }
 }
 
 public class ScreenshotDto

@@ -40,6 +40,7 @@ export function ScreenCapture() {
   const [viewCapture, setViewCapture] = useState<Screenshot | null>(null)
   const [selectedComputer, setSelectedComputer] = useState('')
   const [reason, setReason] = useState('')
+  const [captureAllMonitors, setCaptureAllMonitors] = useState(false)
   const [search, setSearch] = useState('')
   const [selectedComputerFilter, setSelectedComputerFilter] = useState('')
   const [zoomed, setZoomed] = useState(false)
@@ -64,13 +65,14 @@ export function ScreenCapture() {
   })
 
   const requestMutation = useMutation({
-    mutationFn: (data: { computerId: string; reason: string }) =>
+    mutationFn: (data: { computerId: string; reason: string; captureAllMonitors: boolean }) =>
       api.post('/screencapture/request', data),
     onError: (err: Error) => toast.error(err.message),
     onSuccess: () => {
       setShowRequest(false)
       setSelectedComputer('')
       setReason('')
+      setCaptureAllMonitors(false)
       setCapturing(true)
       setProgress(0)
       const interval = setInterval(() => {
@@ -122,7 +124,7 @@ export function ScreenCapture() {
 
   const handleRequest = () => {
     if (!selectedComputer) return
-    requestMutation.mutate({ computerId: selectedComputer, reason })
+    requestMutation.mutate({ computerId: selectedComputer, reason, captureAllMonitors })
   }
 
   const computerOptions = (computers?.items ?? []).map((c) => ({
@@ -280,6 +282,15 @@ export function ScreenCapture() {
               onChange={(e) => setReason(e.target.value)}
               placeholder={t('screenCapture.reasonPlaceholder')}
             />
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={captureAllMonitors}
+                onChange={(e) => setCaptureAllMonitors(e.target.checked)}
+                className="rounded border-border"
+              />
+              {t('screenCapture.captureAllMonitors', 'Capturar todos os monitores')}
+            </label>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowRequest(false)}>{t('screenCapture.cancel')}</Button>

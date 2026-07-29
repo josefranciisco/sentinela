@@ -47,11 +47,17 @@ public class ScreenCaptureController : ControllerBase
         var username = User.Identity?.Name ?? "unknown";
         var adminIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "";
 
+        var parameters = JsonSerializer.Serialize(new
+        {
+            requestId = requestId.ToString(),
+            captureAllMonitors = dto.CaptureAllMonitors
+        });
+
         var command = new
         {
             CommandId = requestId.ToString(),
             CommandType = "CaptureScreen",
-            Parameters = requestId.ToString(),
+            Parameters = parameters,
             ReceivedAt = DateTime.UtcNow
         };
         var commandJson = JsonSerializer.Serialize(command);

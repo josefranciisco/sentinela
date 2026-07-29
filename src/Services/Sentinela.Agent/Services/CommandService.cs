@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Management;
 using System.Text;
+using System.Text.Json;
 using Sentinela.ScreenCapture.DTOs;
 using Sentinela.ScreenCapture.Services;
 
@@ -265,16 +266,30 @@ public class CommandService : ICommandService
         return await TransferFileAsync(parts[0], parts[1]);
     }
 
-    private async Task<CommandResult> HandleCaptureScreenAsync(string captureRequestId)
+    private async Task<CommandResult> HandleCaptureScreenAsync(string parameters)
     {
         try
         {
+            string requestId;
+            bool captureAllMonitors = false;
+            try
+            {
+                using var doc = JsonDocument.Parse(parameters);
+                requestId = doc.RootElement.GetProperty("requestId").GetString() ?? parameters;
+                captureAllMonitors = doc.RootElement.GetProperty("captureAllMonitors").GetBoolean();
+            }
+            catch
+            {
+                requestId = parameters;
+            }
+
             var cmd = new CaptureCommandDto
             {
                 Command = "CaptureScreen",
                 ComputerId = _state.ComputerId,
-                RequestId = captureRequestId,
-                Quality = 80
+                RequestId = requestId,
+                Quality = 80,
+                CaptureAllMonitors = captureAllMonitors
             };
 
             var result = await _orchestrator.ExecuteCaptureAsync(cmd);
