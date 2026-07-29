@@ -20,6 +20,8 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     throw new Error('Unauthorized')
   }
 
+  if (response.status === 204) return undefined as T
+
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: 'Request failed' }))
     throw new Error(error.message || error.title || 'Request failed')
