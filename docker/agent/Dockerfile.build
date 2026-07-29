@@ -1,0 +1,5 @@
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+WORKDIR /build
+COPY . .
+RUN dotnet publish src/Services/Sentinela.Agent/Sentinela.Agent.csproj -c Release -r win-x64 --self-contained true -o /publish
+CMD ["cp", "-r", "/publish", "/output"]

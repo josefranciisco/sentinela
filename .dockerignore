@@ -1,0 +1,51 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Build outputs
+bin/
+obj/
+publish/
+*.user
+*.suo
+*.DotSettings.user
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.sln.ide/
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Logs
+*.log
+logs/
+nbbuild/
+
+# Temp
+tmp/
+temp/
+*/temp/
+
+# Node
+node_modules/
+**/node_modules/
+
+# Docker
+docker-compose*.yml
+.dockerignore
+Dockerfile*
+**/Dockerfile*
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Scripts
+scripts/
