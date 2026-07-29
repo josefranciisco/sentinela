@@ -7,9 +7,10 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Dialog, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { Camera, Eye, Download, Search, X, Loader2, Monitor, Maximize2 } from 'lucide-react'
+import { Camera, Eye, Download, Search, X, Loader2, Monitor, Maximize2, Trash2, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { useAuthStore } from '@/stores/auth'
 
 interface Screenshot {
   id: string
@@ -44,6 +45,7 @@ export function ScreenCapture() {
   const [zoomed, setZoomed] = useState(false)
   const [capturing, setCapturing] = useState(false)
   const [progress, setProgress] = useState(0)
+  const [confirmDelete, setConfirmDelete] = useState<Screenshot | null>(null)
   const imgRef = useRef<HTMLImageElement>(null)
 
   const { data: screenshots, isLoading } = useQuery({
@@ -85,6 +87,38 @@ export function ScreenCapture() {
       }, 5000)
     },
   })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/screencapture/${id}`),
+    onError: (err: Error) => toast.error(err.message),
+    onSuccess: () => {
+      toast.success(t('screenCapture.deleted', 'Captura excluída'))
+      setConfirmDelete(null)
+      setViewCapture(null)
+      queryClient.invalidateQueries({ queryKey: ['screenshots'] })
+    },
+  })
+
+  const handleDownload = async (screenshot: Screenshot) => {
+    try {
+      const token = useAuthStore.getState().accessToken
+      const headers: Record<string, string> = {}
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      const res = await fetch(screenshot.imageUrl!, { headers })
+      if (!res.ok) throw new Error('Download failed')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `screenshot_${screenshot.monitorName.replace(/\s+/g, '_')}_${screenshot.id.slice(0, 8)}.jpg`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      toast.error(t('screenCapture.downloadError', 'Erro ao baixar imagem'))
+    }
+  }
 
   const handleRequest = () => {
     if (!selectedComputer) return
@@ -212,9 +246,12 @@ export function ScreenCapture() {
                     </div>
                   </div>
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
-                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <div className="bg-background/90 backdrop-blur-sm rounded-full p-1 shadow">
+                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                    <div className="bg-background/90 backdrop-blur-sm rounded-full p-1 shadow cursor-pointer" onClick={(e) => { e.stopPropagation(); setViewCapture(s) }}>
                       <Eye className="h-3.5 w-3.5" />
+                    </div>
+                    <div className="bg-background/90 backdrop-blur-sm rounded-full p-1 shadow cursor-pointer hover:bg-destructive/10" onClick={(e) => { e.stopPropagation(); setConfirmDelete(s) }}>
+                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
                     </div>
                   </div>
                 </div>
@@ -258,7 +295,7 @@ export function ScreenCapture() {
           <div className="flex items-center justify-between p-4 text-white">
             <span className="text-sm text-white/70">{viewCapture?.monitorName} - {viewCapture?.width}x{viewCapture?.height}</span>
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" className="text-white hover:text-white/80" onClick={(e) => { e.stopPropagation(); window.open(viewCapture?.imageUrl, '_blank') }}>
+              <Button variant="ghost" size="sm" className="text-white hover:text-white/80" onClick={(e) => { e.stopPropagation(); viewCapture && handleDownload(viewCapture) }}>
                 <Download className="h-4 w-4" />
               </Button>
               <Button variant="ghost" size="sm" className="text-white hover:text-white/80" onClick={(e) => { e.stopPropagation(); setZoomed(false) }}>
@@ -280,8 +317,11 @@ export function ScreenCapture() {
                   <Button variant="ghost" size="sm" onClick={() => setZoomed(true)} title={t('screenCapture.fullscreen')}>
                     <Maximize2 className="h-4 w-4" />
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={() => window.open(viewCapture?.imageUrl, '_blank')} title={t('screenCapture.download')}>
+                  <Button variant="ghost" size="sm" onClick={() => viewCapture && handleDownload(viewCapture)} title={t('screenCapture.download')}>
                     <Download className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(viewCapture)} title={t('screenCapture.delete', 'Excluir')}>
+                    <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>
                 </div>
               </div>
@@ -311,6 +351,26 @@ export function ScreenCapture() {
           </div>
         </Dialog>
       )}
+
+      <Dialog open={!!confirmDelete} onClose={() => setConfirmDelete(null)}>
+        <div className="p-6">
+          <DialogHeader>
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              <DialogTitle>{t('screenCapture.confirmDelete', 'Confirmar exclusão')}</DialogTitle>
+            </div>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground mt-2">
+            {t('screenCapture.confirmDeleteMessage', 'Tem certeza que deseja excluir esta captura? Esta ação não pode ser desfeita.')}
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDelete(null)}>{t('screenCapture.cancel')}</Button>
+            <Button variant="destructive" onClick={() => confirmDelete && deleteMutation.mutate(confirmDelete.id)} disabled={deleteMutation.isPending}>
+              {deleteMutation.isPending ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> {t('common.loading')}</> : t('screenCapture.delete', 'Excluir')}
+            </Button>
+          </DialogFooter>
+        </div>
+      </Dialog>
     </div>
   )
 }
