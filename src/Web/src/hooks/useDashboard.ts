@@ -16,23 +16,9 @@ export function useDashboardActivity() {
   })
 }
 
-export function useDashboardTopApps() {
+export function useIncidents(limit = 5) {
   return useQuery({
-    queryKey: ['dashboard-top-apps'],
-    queryFn: () => api.get('/dashboard/top-applications'),
-  })
-}
-
-export function useDashboardAvailability() {
-  return useQuery({
-    queryKey: ['dashboard-availability'],
-    queryFn: () => api.get('/dashboard/availability'),
-  })
-}
-
-export function useDashboardHeatmap() {
-  return useQuery({
-    queryKey: ['dashboard-heatmap'],
-    queryFn: () => api.get('/dashboard/heatmap'),
+    queryKey: ['security-incidents', limit],
+    queryFn: () => api.get(`/security/incidents?limit=${limit}`),
   })
 }

@@ -278,7 +278,7 @@ public class CollectorWorker : BackgroundService
                 {
                     EventType = "AppFocus",
                     Category = "Application",
-                    Description = $"Switched to {procName}",
+                    Description = $"Mudou para {procName}",
                     Timestamp = DateTime.UtcNow,
                     Severity = "Info",
                     ComputerId = _state.ComputerId

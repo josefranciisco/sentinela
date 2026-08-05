@@ -1,14 +1,16 @@
-using System.Collections.Concurrent;
 using System.Security.Cryptography;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Sentinela.Persistence;
+using Sentinela.Persistence.Models;
 using Sentinela.RemoteAssistance.Configuration;
 
 namespace Sentinela.RemoteAssistance.Core;
 
 public class FileTransferService : IFileTransferService
 {
-    private readonly ConcurrentDictionary<Guid, FileTransfer> _transfers = new();
+    private readonly SentinelaDbContext _dbContext;
     private readonly ILogger<FileTransferService> _logger;
     private readonly RemoteAssistanceOptions _options;
 
@@ -18,13 +20,14 @@ public class FileTransferService : IFileTransferService
         ".reg", ".msi", ".msp", ".jar", ".wsf", ".wsh", ".sh", ".appref-ms"
     };
 
-    public FileTransferService(IOptions<RemoteAssistanceOptions> options, ILogger<FileTransferService> logger)
+    public FileTransferService(SentinelaDbContext dbContext, IOptions<RemoteAssistanceOptions> options, ILogger<FileTransferService> logger)
     {
+        _dbContext = dbContext;
         _options = options.Value;
         _logger = logger;
     }
 
-    public Task<FileTransfer> CreateTransferAsync(Guid sessionId, TransferDirection direction, string fileName, long fileSize, string sourcePath, string destinationPath, string transferredBy)
+    public async Task<FileTransfer> CreateTransferAsync(Guid sessionId, TransferDirection direction, string fileName, long fileSize, string sourcePath, string destinationPath, string transferredBy)
     {
         if (!_options.Enabled)
             throw new InvalidOperationException("Remote assistance is disabled.");
@@ -33,15 +36,15 @@ public class FileTransferService : IFileTransferService
         if (fileSize > maxBytes)
             throw new InvalidOperationException($"File size {fileSize} exceeds maximum allowed {maxBytes} bytes.");
 
-        var transfer = new FileTransfer
+        var record = new FileTransferRecord
         {
             Id = Guid.NewGuid(),
             SessionId = sessionId,
-            Direction = direction,
+            Direction = direction.ToString(),
             FileName = fileName,
             FileSize = fileSize,
             BytesTransferred = 0,
-            Status = TransferStatus.Pending,
+            Status = TransferStatus.Pending.ToString(),
             SourcePath = sourcePath,
             DestinationPath = destinationPath,
             StartedAt = DateTimeOffset.UtcNow,
@@ -49,75 +52,90 @@ public class FileTransferService : IFileTransferService
             IsEncrypted = true
         };
 
-        _transfers.TryAdd(transfer.Id, transfer);
+        _dbContext.FileTransfers.Add(record);
+        await _dbContext.SaveChangesAsync();
+
         _logger.LogInformation("File transfer created: {TransferId} file={FileName} size={FileSize} direction={Direction}",
-            transfer.Id, fileName, fileSize, direction);
+            record.Id, fileName, fileSize, direction);
 
-        return Task.FromResult(transfer);
+        return MapToDomain(record);
     }
 
-    public Task<FileTransfer?> GetTransferAsync(Guid transferId)
+    public async Task<FileTransfer?> GetTransferAsync(Guid transferId)
     {
-        _transfers.TryGetValue(transferId, out var transfer);
-        return Task.FromResult(transfer);
+        var record = await _dbContext.FileTransfers.FindAsync(transferId);
+        return record is null ? null : MapToDomain(record);
     }
 
-    public Task<IEnumerable<FileTransfer>> GetTransfersBySessionAsync(Guid sessionId)
+    public async Task<IEnumerable<FileTransfer>> GetTransfersBySessionAsync(Guid sessionId)
     {
-        var result = _transfers.Values.Where(t => t.SessionId == sessionId).OrderBy(t => t.StartedAt);
-        return Task.FromResult(result);
+        var records = await _dbContext.FileTransfers
+            .Where(t => t.SessionId == sessionId)
+            .OrderBy(t => t.StartedAt)
+            .ToListAsync();
+
+        return records.Select(MapToDomain);
     }
 
-    public Task<bool> UpdateTransferProgressAsync(Guid transferId, long bytesTransferred)
+    public async Task<bool> UpdateTransferProgressAsync(Guid transferId, long bytesTransferred)
     {
-        if (!_transfers.TryGetValue(transferId, out var transfer))
-            return Task.FromResult(false);
+        var record = await _dbContext.FileTransfers.FindAsync(transferId);
+        if (record is null) return false;
 
-        transfer.BytesTransferred = bytesTransferred;
-        transfer.Status = bytesTransferred >= transfer.FileSize ? TransferStatus.Completed : TransferStatus.Transferring;
+        record.BytesTransferred = bytesTransferred;
+        record.Status = bytesTransferred >= record.FileSize
+            ? TransferStatus.Completed.ToString()
+            : TransferStatus.Transferring.ToString();
 
-        if (transfer.Status == TransferStatus.Completed)
-            transfer.CompletedAt = DateTimeOffset.UtcNow;
+        if (record.Status == TransferStatus.Completed.ToString())
+            record.CompletedAt = DateTimeOffset.UtcNow;
 
-        return Task.FromResult(true);
+        await _dbContext.SaveChangesAsync();
+        return true;
     }
 
-    public Task<bool> CompleteTransferAsync(Guid transferId, string checksum)
+    public async Task<bool> CompleteTransferAsync(Guid transferId, string checksum)
     {
-        if (!_transfers.TryGetValue(transferId, out var transfer))
-            return Task.FromResult(false);
+        var record = await _dbContext.FileTransfers.FindAsync(transferId);
+        if (record is null) return false;
 
-        transfer.Status = TransferStatus.Completed;
-        transfer.BytesTransferred = transfer.FileSize;
-        transfer.Checksum = checksum;
-        transfer.CompletedAt = DateTimeOffset.UtcNow;
+        record.Status = TransferStatus.Completed.ToString();
+        record.BytesTransferred = record.FileSize;
+        record.Checksum = checksum;
+        record.CompletedAt = DateTimeOffset.UtcNow;
+
+        await _dbContext.SaveChangesAsync();
 
         _logger.LogInformation("File transfer completed: {TransferId} checksum={Checksum}", transferId, checksum);
-        return Task.FromResult(true);
+        return true;
     }
 
-    public Task<bool> FailTransferAsync(Guid transferId, string error)
+    public async Task<bool> FailTransferAsync(Guid transferId, string error)
     {
-        if (!_transfers.TryGetValue(transferId, out var transfer))
-            return Task.FromResult(false);
+        var record = await _dbContext.FileTransfers.FindAsync(transferId);
+        if (record is null) return false;
 
-        transfer.Status = TransferStatus.Failed;
-        transfer.CompletedAt = DateTimeOffset.UtcNow;
+        record.Status = TransferStatus.Failed.ToString();
+        record.CompletedAt = DateTimeOffset.UtcNow;
+
+        await _dbContext.SaveChangesAsync();
 
         _logger.LogError("File transfer failed: {TransferId} error={Error}", transferId, error);
-        return Task.FromResult(true);
+        return true;
     }
 
-    public Task<bool> CancelTransferAsync(Guid transferId)
+    public async Task<bool> CancelTransferAsync(Guid transferId)
     {
-        if (!_transfers.TryGetValue(transferId, out var transfer))
-            return Task.FromResult(false);
+        var record = await _dbContext.FileTransfers.FindAsync(transferId);
+        if (record is null) return false;
 
-        transfer.Status = TransferStatus.Cancelled;
-        transfer.CompletedAt = DateTimeOffset.UtcNow;
+        record.Status = TransferStatus.Cancelled.ToString();
+        record.CompletedAt = DateTimeOffset.UtcNow;
+
+        await _dbContext.SaveChangesAsync();
 
         _logger.LogInformation("File transfer cancelled: {TransferId}", transferId);
-        return Task.FromResult(true);
+        return true;
     }
 
     public async Task<string> ComputeChecksumAsync(Stream stream)
@@ -160,4 +178,22 @@ public class FileTransferService : IFileTransferService
 
         return Task.FromResult(true);
     }
+
+    private static FileTransfer MapToDomain(FileTransferRecord record) => new()
+    {
+        Id = record.Id,
+        SessionId = record.SessionId,
+        Direction = Enum.Parse<TransferDirection>(record.Direction),
+        FileName = record.FileName,
+        FileSize = record.FileSize,
+        BytesTransferred = record.BytesTransferred,
+        Status = Enum.Parse<TransferStatus>(record.Status),
+        SourcePath = record.SourcePath,
+        DestinationPath = record.DestinationPath,
+        Checksum = record.Checksum,
+        StartedAt = record.StartedAt,
+        CompletedAt = record.CompletedAt,
+        TransferredBy = record.TransferredBy,
+        IsEncrypted = record.IsEncrypted
+    };
 }

@@ -194,4 +194,134 @@ public class SecurityController : ControllerBase
             CollectedAt = s.CollectedAt.UtcDateTime
         }).ToList());
     }
+
+    [HttpGet("incidents")]
+    public async Task<ActionResult<List<IncidentDto>>> GetIncidents([FromQuery] int limit = 5)
+    {
+        var last24h = DateTimeOffset.UtcNow.AddHours(-24);
+        
+        var events = await _eventRepo.Query()
+            .Where(e => !e.IsDeleted && e.Timestamp >= last24h)
+            .OrderByDescending(e => e.Timestamp)
+            .ToListAsync();
+
+        var computerIds = events.Select(e => e.ComputerId).Distinct().ToList();
+        var computers = await _computerRepo.Query()
+            .Where(c => computerIds.Contains(c.Id))
+            .ToDictionaryAsync(c => c.Id, c => c.Hostname);
+
+        var filteredEvents = events.Where(e => !IsNoiseEvent(e.EventType)).ToList();
+
+        var incidents = filteredEvents
+            .GroupBy(e => new { e.ComputerId, Severity = e.Severity })
+            .Select(g => new
+            {
+                ComputerId = g.Key.ComputerId,
+                Severity = g.Key.Severity,
+                Events = g.ToList()
+            })
+            .Where(g => g.Events.Any())
+            .Select(g => new IncidentDto
+            {
+                Id = Guid.NewGuid(),
+                ComputerId = g.ComputerId,
+                ComputerName = computers.GetValueOrDefault(g.ComputerId) ?? "Unknown",
+                RiskLevel = GetRiskLevel(g.Severity),
+                Title = GenerateIncidentTitle(g.ComputerId, g.Events),
+                Description = GenerateIncidentDescription(g.Events),
+                Events = g.Events.Select(e => new IncidentEventDto
+                {
+                    EventType = e.EventType,
+                    Description = e.Description,
+                    Severity = e.Severity.ToString(),
+                    Timestamp = e.Timestamp.UtcDateTime
+                }).OrderByDescending(e => e.Timestamp).ToList(),
+                Timestamp = g.Events.Max(e => e.Timestamp).UtcDateTime,
+                EventCount = g.Events.Count
+            })
+            .OrderByDescending(i => GetRiskOrder(i.RiskLevel))
+            .ThenByDescending(i => i.Timestamp)
+            .Take(limit)
+            .ToList();
+
+        return Ok(incidents);
+    }
+
+    private bool IsNoiseEvent(string eventType)
+    {
+        var noiseEvents = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "AppFocus", "AppStarted", "AppClosed", "IdleStart", "IdleEnd",
+            "Login", "Logout", "Lock", "Unlock",
+            "AntivirusDisabled", "AntivirusOutdated"
+        };
+        return noiseEvents.Contains(eventType);
+    }
+
+    private string GetRiskLevel(Severity severity)
+    {
+        return severity switch
+        {
+            Severity.Critical => "Crítico",
+            Severity.High => "Alto",
+            Severity.Medium => "Médio",
+            Severity.Low => "Baixo",
+            _ => "Informativo"
+        };
+    }
+
+    private int GetRiskOrder(string riskLevel)
+    {
+        return riskLevel switch
+        {
+            "Crítico" => 5,
+            "Alto" => 4,
+            "Médio" => 3,
+            "Baixo" => 2,
+            _ => 1
+        };
+    }
+
+    private string GenerateIncidentTitle(Guid computerId, List<SecurityEvent> events)
+    {
+        var eventTypes = events.Select(e => e.EventType).Distinct().ToList();
+        
+        if (eventTypes.Contains("CryptominerDetected") || eventTypes.Contains("HighCpuProcess"))
+            return "Possível Atividade de Cryptomineração";
+        
+        if (eventTypes.Contains("MassFileRename"))
+            return "Ataque de Ransomware Detectado";
+        
+        if (eventTypes.Contains("RansomwarePattern"))
+            return "Extensão Suspeita de Ransomware";
+        
+        if (eventTypes.Contains("MalwareDetected"))
+            return "Malware Detectado";
+        
+        if (eventTypes.Contains("AntivirusDisabled"))
+            return "Proteção Antivírus Desativada";
+        
+        if (eventTypes.Contains("FailedLogon"))
+            return "Tentativas de Login Falharam";
+        
+        if (eventTypes.Contains("USBConnected") || eventTypes.Contains("USBDisconnected"))
+            return "Atividade de Dispositivo USB";
+        
+        if (eventTypes.Contains("FileCopy"))
+            return "Cópia de Arquivos Detectada";
+        
+        return $"Múltiplos Eventos de Segurança ({events.Count} eventos)";
+    }
+
+    private string GenerateIncidentDescription(List<SecurityEvent> events)
+    {
+        var descriptions = new List<string>();
+        
+        foreach (var group in events.GroupBy(e => e.EventType).OrderByDescending(g => g.Max(e => e.Severity)))
+        {
+            descriptions.Add($"{group.Key}: {group.Count()} ocorrência(s)");
+        }
+        
+        return string.Join("\n", descriptions);
+    }
 }

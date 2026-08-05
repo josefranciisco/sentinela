@@ -38,7 +38,7 @@ export function useComputerApplications(computerId: string) {
 export function useComputerAlerts(computerId: string) {
   return useQuery({
     queryKey: ['computer-alerts', computerId],
-    queryFn: () => api.get(`/computers/${computerId}/alerts`),
+    queryFn: () => api.get(`/alerts?computerId=${computerId}&pageSize=50`),
     enabled: !!computerId,
   })
 }

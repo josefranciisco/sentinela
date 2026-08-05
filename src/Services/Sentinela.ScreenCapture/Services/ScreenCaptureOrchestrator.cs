@@ -74,7 +74,7 @@ public class ScreenCaptureOrchestrator : IScreenCaptureOrchestrator
             result.CaptureTimeMs = capture.TimestampMs;
             result.Width = capture.Width;
             result.Height = capture.Height;
-            result.MonitorName = Environment.MachineName;
+            result.MonitorName = capture.MonitorName;
 
             var compressed = _compressionService.Compress(capture.ImageData, new CompressionOptions
             {
@@ -91,13 +91,13 @@ public class ScreenCaptureOrchestrator : IScreenCaptureOrchestrator
             {
                 ImageData = compressed.Data, ThumbnailData = thumbnail.Data,
                 Width = capture.Width, Height = capture.Height,
-                MonitorName = Environment.MachineName, CapturedAt = DateTime.UtcNow
+                MonitorName = capture.MonitorName, CapturedAt = DateTime.UtcNow
             }, TimeSpan.FromSeconds(30));
 
             var uploadResult = await _uploadService.UploadAsync(new ScreenshotUpload
             {
                 ComputerId = command.ComputerId, RequestId = command.RequestId,
-                MonitorName = Environment.MachineName, Width = capture.Width, Height = capture.Height,
+                MonitorName = capture.MonitorName, Width = capture.Width, Height = capture.Height,
                 ImageData = compressed.Data, ThumbnailData = thumbnail.Data,
                 ImageMimeType = compressed.MimeType, User = Environment.UserName, Hash = hash,
                 TimestampMs = capture.TimestampMs

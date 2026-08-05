@@ -42,6 +42,7 @@ public class Computer : AggregateRoot
     public string? AgentVersion { get; private set; }
     public bool IsAgentUpdated { get; private set; }
     public string? Notes { get; private set; }
+    public int MonitorCount { get; private set; } = 1;
 
     public IReadOnlyList<Heartbeat> Heartbeats => _heartbeats.AsReadOnly();
     public IReadOnlyList<TimelineEntry> Timeline => _timeline.AsReadOnly();
@@ -58,6 +59,11 @@ public class Computer : AggregateRoot
         IpAddress = ipAddress;
         CurrentUser = currentUser;
         LastHeartbeat = DateTimeOffset.UtcNow;
+    }
+
+    public void UpdateMonitorCount(int monitorCount)
+    {
+        if (monitorCount > 0) MonitorCount = monitorCount;
     }
 
     public void AddHeartbeat(Heartbeat heartbeat)

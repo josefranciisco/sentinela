@@ -43,5 +43,15 @@ public class MappingProfile : Profile
         CreateMap<WorkflowCondition, WorkflowConditionDto>();
         CreateMap<WorkflowAction, WorkflowActionDto>();
         CreateMap<WorkflowExecutionLog, WorkflowExecutionLogDto>();
+
+        CreateMap<RemoteSession, RemoteSessionDto>()
+            .ForMember(d => d.Id, o => o.MapFrom(s => s.Id))
+            .ForMember(d => d.ComputerId, o => o.MapFrom(s => s.ComputerId))
+            .ForMember(d => d.RequestedBy, o => o.MapFrom(s => s.RequestedBy))
+            .ForMember(d => d.SessionType, o => o.MapFrom(s => s.SessionType))
+            .ForMember(d => d.Status, o => o.MapFrom(s => s.Status))
+            .ForMember(d => d.RequestedAt, o => o.MapFrom(s => s.RequestedAt.UtcDateTime))
+            .ForMember(d => d.TerminatedAt, o => o.MapFrom(s => s.TerminatedAt.HasValue ? s.TerminatedAt.Value.UtcDateTime : (DateTime?)null))
+            .ForMember(d => d.MonitorIndex, o => o.MapFrom(s => s.MonitorIndex));
     }
 }

@@ -7,7 +7,7 @@ export function useSignalR(hubUrl: string, callbacks: Record<string, (...args: a
   const token = useAuthStore(state => state.accessToken)
 
   useEffect(() => {
-    if (!token) return
+    if (!token || !hubUrl) return
 
     const connection = new signalR.HubConnectionBuilder()
       .withUrl(hubUrl, { accessTokenFactory: () => token })

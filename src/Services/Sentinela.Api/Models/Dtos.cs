@@ -20,6 +20,7 @@ public class ComputerDto
     public string OsVersion { get; set; } = string.Empty;
     public DateTime? LastHeartbeat { get; set; }
     public DateTime CreatedAt { get; set; }
+    public int MonitorCount { get; set; } = 1;
 }
 
 public class ComputerDetailDto : ComputerDto
@@ -31,6 +32,14 @@ public class ComputerDetailDto : ComputerDto
     public int RamMb { get; set; }
     public List<DiskInfoDto> Disks { get; set; } = new();
     public string MacAddress { get; set; } = string.Empty;
+    public bool? FirewallEnabled { get; set; }
+    public bool? DefenderEnabled { get; set; }
+    public bool? AntivirusEnabled { get; set; }
+    public bool? RealTimeProtectionEnabled { get; set; }
+    public bool? BitlockerEnabled { get; set; }
+    public bool? RdpEnabled { get; set; }
+    public string? AntivirusProductName { get; set; }
+    public DateTime? SecurityCollectedAt { get; set; }
 }
 
 public class DiskInfoDto
@@ -104,8 +113,10 @@ public class AgentSoftwareItemDto
 public class ApplicationUsageDto
 {
     public string ProcessName { get; set; } = string.Empty;
+    public string Name => ProcessName;
     public long TotalDuration { get; set; }
     public int ExecutionCount { get; set; }
+    public int Count => ExecutionCount;
     public DateTimeOffset FirstSeen { get; set; }
     public DateTimeOffset LastSeen { get; set; }
 }
@@ -155,6 +166,7 @@ public class HeatmapDto
     public DateTime Date { get; set; }
     public int Hour { get; set; }
     public int Count { get; set; }
+    public int Value => Count;
 }
 
 public class AvailabilityDto
@@ -162,6 +174,7 @@ public class AvailabilityDto
     public DateTime Date { get; set; }
     public int OnlineCount { get; set; }
     public int TotalCount { get; set; }
+    public double Percentage => TotalCount > 0 ? Math.Round((double)OnlineCount / TotalCount * 100, 1) : 0;
 }
 
 public class TopUserDto
@@ -276,23 +289,34 @@ public class RemoteSessionDto
 {
     public Guid Id { get; set; }
     public Guid ComputerId { get; set; }
+    public string ComputerName { get; set; } = string.Empty;
     public string RequestedBy { get; set; } = string.Empty;
     public string SessionType { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public DateTime RequestedAt { get; set; }
     public DateTime? TerminatedAt { get; set; }
+    public int? MonitorIndex { get; set; }
 }
 
 public class RequestSessionDto
 {
     public Guid ComputerId { get; set; }
     public string SessionType { get; set; } = string.Empty;
+    public int? MonitorIndex { get; set; }
 }
 
 public class RemoteCommandDto
 {
     public string Command { get; set; } = string.Empty;
     public string Parameters { get; set; } = string.Empty;
+}
+
+public class RemoteScreenFrameDto
+{
+    public string SessionId { get; set; } = string.Empty;
+    public byte[] FrameData { get; set; } = Array.Empty<byte>();
+    public long FrameNumber { get; set; }
+    public DateTime Timestamp { get; set; }
 }
 
 public class SoftwareInventoryDto
@@ -505,6 +529,7 @@ public class AgentHeartbeatDto
     public string Hostname { get; set; } = string.Empty;
     public string IpAddress { get; set; } = string.Empty;
     public string CurrentUser { get; set; } = string.Empty;
+    public int MonitorCount { get; set; } = 1;
 }
 
 public class ScreenCaptureDataDto
@@ -551,4 +576,25 @@ public class FileChunkDto
     public int ChunkIndex { get; set; }
     public int TotalChunks { get; set; }
     public byte[] Data { get; set; } = Array.Empty<byte>();
+}
+
+public class IncidentDto
+{
+    public Guid Id { get; set; }
+    public Guid ComputerId { get; set; }
+    public string ComputerName { get; set; } = string.Empty;
+    public string RiskLevel { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public List<IncidentEventDto> Events { get; set; } = new();
+    public DateTime Timestamp { get; set; }
+    public int EventCount { get; set; }
+}
+
+public class IncidentEventDto
+{
+    public string EventType { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string Severity { get; set; } = string.Empty;
+    public DateTime Timestamp { get; set; }
 }

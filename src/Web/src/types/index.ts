@@ -12,6 +12,14 @@ export interface Computer {
   agentVersion: string
   uptime: number
   tags: string[]
+  firewallEnabled?: boolean
+  defenderEnabled?: boolean
+  antivirusEnabled?: boolean
+  realTimeProtectionEnabled?: boolean
+  bitlockerEnabled?: boolean
+  rdpEnabled?: boolean
+  antivirusProductName?: string
+  securityCollectedAt?: string
 }
 
 export interface Alert {

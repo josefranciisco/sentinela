@@ -4,26 +4,15 @@ import { useAuthStore } from '@/stores/auth'
 import { useTranslation } from 'react-i18next'
 import { Avatar } from '@/components/ui/avatar'
 import {
-  LayoutDashboard, Monitor, Bell, Shield, Workflow, Package,
-  FileSearch, Camera, Radio, Brain, BarChart3, Tv, Settings, Users,
-  ChevronLeft, LogOut, Download,
+  LayoutDashboard, Monitor, Settings, Users,
+  ChevronLeft, LogOut, Radio,
 } from 'lucide-react'
 
 const navItems = [
   { icon: LayoutDashboard, labelKey: 'nav.dashboard', path: '/' },
   { icon: Monitor, labelKey: 'nav.computers', path: '/computers' },
-  { icon: Bell, labelKey: 'nav.alerts', path: '/alerts' },
-  { icon: Download, labelKey: 'nav.fileTransfers', path: '/file-transfers' },
-  { icon: Shield, labelKey: 'nav.security', path: '/security' },
-  { icon: Workflow, labelKey: 'nav.automation', path: '/automation' },
-  { icon: Package, labelKey: 'nav.software', path: '/software' },
-  { icon: FileSearch, labelKey: 'nav.audit', path: '/audit' },
-  { icon: Camera, labelKey: 'nav.screenCaptures', path: '/screenshots' },
-  { icon: Radio, labelKey: 'nav.remoteAssist', path: '/remote' },
-  { icon: Brain, labelKey: 'nav.aiAssistant', path: '/ai' },
-  { icon: BarChart3, labelKey: 'nav.executive', path: '/executive' },
-  { icon: Tv, labelKey: 'nav.nocMode', path: '/noc' },
   { icon: Users, labelKey: 'nav.users', path: '/users' },
+  { icon: Radio, labelKey: 'nav.remoteAssist', path: '/remote-assistance' },
   { icon: Settings, labelKey: 'nav.settings', path: '/settings' },
 ]
 

@@ -11,7 +11,7 @@ public static class RemoteAssistanceServiceRegistration
         services.Configure<RemoteAssistanceOptions>(configuration.GetSection("RemoteAssistance"));
         services.AddSingleton<IRemoteSessionService, RemoteSessionService>();
         services.AddSingleton<ICommandExecutionService, CommandExecutionService>();
-        services.AddSingleton<IFileTransferService, FileTransferService>();
+        services.AddScoped<IFileTransferService, FileTransferService>();
         return services;
     }
 }

@@ -27,32 +27,7 @@ public class AgentCommandEvent : IEvent
     public string? IssuedBy { get; }
 }
 
-public enum CaptureStatus
-{
-    Pending,
-    Captured,
-    Failed,
-    Expired
-}
-
-public enum SessionStatus
-{
-    Pending,
-    Active,
-    Terminated,
-    Expired
-}
-
-public class ScreenCapture : BaseEntity
-{
-    public Guid ComputerId { get; set; }
-    public byte[]? ImageData { get; set; }
-    public DateTimeOffset CapturedAt { get; set; }
-    public CaptureStatus Status { get; set; }
-    public string? RequestedBy { get; set; }
-    public string? Reason { get; set; }
-    public DateTimeOffset RequestedAt { get; set; }
-}
+// ScreenCapture and CaptureStatus moved to Sentinela.Persistence.Models.ScreenCapture
 
 public class SoftwareInventory : BaseEntity
 {
@@ -66,18 +41,9 @@ public class SoftwareInventory : BaseEntity
     public DateTimeOffset LastDetected { get; set; }
 }
 
-// Prefer Sentinela.Persistence.Models.SoftwareInventoryItem for persistence.
+// RemoteSession moved to Sentinela.Persistence.Models.RemoteSession
 
-public class RemoteSession : BaseEntity
-{
-    public Guid ComputerId { get; set; }
-    public string? RequestedBy { get; set; }
-    public string SessionType { get; set; } = string.Empty;
-    public SessionStatus Status { get; set; }
-    public DateTimeOffset RequestedAt { get; set; }
-    public DateTimeOffset? TerminatedAt { get; set; }
-    public string? TerminatedBy { get; set; }
-}
+// SessionStatus moved to Sentinela.Persistence.Models (string-based)
 
 public class AgentCommand
 {

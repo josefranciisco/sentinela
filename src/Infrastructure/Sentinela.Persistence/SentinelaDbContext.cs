@@ -40,6 +40,9 @@ public class SentinelaDbContext : DbContext, IUnitOfWork
     public DbSet<Screenshot> Screenshots => Set<Screenshot>();
     public DbSet<SoftwareInventoryItem> SoftwareInventory => Set<SoftwareInventoryItem>();
     public DbSet<EndpointSecurityStatus> EndpointSecurityStatuses => Set<EndpointSecurityStatus>();
+    public DbSet<RemoteSession> RemoteSessions => Set<RemoteSession>();
+    public DbSet<ScreenCapture> ScreenCaptures => Set<ScreenCapture>();
+    public DbSet<FileTransferRecord> FileTransfers => Set<FileTransferRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

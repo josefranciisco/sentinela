@@ -30,10 +30,16 @@ public static class AgentServiceRegistration
         
         services.AddSingleton<IAgentHubClient, AgentHubClient>();
         
+        services.AddSingleton<ICryptominerDetector, CryptominerDetector>();
+        services.AddSingleton<IRansomwareDetector, RansomwareDetector>();
+        
         services.AddHostedService<HeartbeatWorker>();
         services.AddHostedService<CollectorWorker>();
         services.AddHostedService<CommunicationWorker>();
         services.AddHostedService<WatchdogWorker>();
+        services.AddHostedService<RemoteSessionWorker>();
+        services.AddHostedService<CryptominerDetectorHost>();
+        services.AddHostedService<RansomwareDetectorHost>();
         
         services.AddHttpClient("SentinelaApi", client =>
         {

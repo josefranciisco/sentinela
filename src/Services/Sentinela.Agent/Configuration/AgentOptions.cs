@@ -18,8 +18,8 @@ public class AgentOptions
 
 public class ServerConnectionOptions
 {
-    public string ApiUrl { get; set; } = "https://localhost:5001";
-    public string SignalRUrl { get; set; } = "https://localhost:5001/hubs/agent";
+    public string ApiUrl { get; set; } = "http://localhost:5002";
+    public string SignalRUrl { get; set; } = "http://localhost:5002/hubs/agent";
     public string ApiKey { get; set; } = string.Empty;
     public string ClientCertificatePath { get; set; } = string.Empty;
     public int ReconnectDelayMs { get; set; } = 1000;

@@ -288,7 +288,7 @@ public class CommandService : ICommandService
                 Command = "CaptureScreen",
                 ComputerId = _state.ComputerId,
                 RequestId = requestId,
-                Quality = 80,
+                Quality = 100,
                 CaptureAllMonitors = captureAllMonitors
             };
 

@@ -13,10 +13,14 @@ public interface IAgentHubClient
     Task SendSecurityStatusAsync(SecurityStatusData status, CancellationToken ct = default);
     Task SendSoftwareInventoryAsync(SoftwareInventoryData inventory, CancellationToken ct = default);
     Task SendScreenCaptureAsync(ScreenCaptureData data, CancellationToken ct = default);
+    Task SendRemoteScreenFrameAsync(RemoteScreenFrameData data, CancellationToken ct = default);
     bool IsConnected { get; }
     event EventHandler<CommandReceivedEventArgs>? CommandReceived;
     event EventHandler<ConfigUpdateEventArgs>? ConfigUpdated;
     event EventHandler<AgentUpdateEventArgs>? AgentUpdateRequested;
+    event EventHandler<RemoteSessionStartedEventArgs>? RemoteSessionStarted;
+    event EventHandler<RemoteSessionStoppedEventArgs>? RemoteSessionStopped;
+    event EventHandler<RemoteSessionMonitorChangedEventArgs>? RemoteSessionMonitorChanged;
 }
 
 public class AgentHubClient : IAgentHubClient, IAsyncDisposable
@@ -32,6 +36,9 @@ public class AgentHubClient : IAgentHubClient, IAsyncDisposable
     public event EventHandler<CommandReceivedEventArgs>? CommandReceived;
     public event EventHandler<ConfigUpdateEventArgs>? ConfigUpdated;
     public event EventHandler<AgentUpdateEventArgs>? AgentUpdateRequested;
+    public event EventHandler<RemoteSessionStartedEventArgs>? RemoteSessionStarted;
+    public event EventHandler<RemoteSessionStoppedEventArgs>? RemoteSessionStopped;
+    public event EventHandler<RemoteSessionMonitorChangedEventArgs>? RemoteSessionMonitorChanged;
 
     public AgentHubClient(IOptions<ServerConnectionOptions> options, ILogger<AgentHubClient> logger)
     {
@@ -89,6 +96,24 @@ public class AgentHubClient : IAgentHubClient, IAsyncDisposable
         _connection.On<string>("UpdateAgent", async (updateJson) =>
         {
             AgentUpdateRequested?.Invoke(this, new AgentUpdateEventArgs(updateJson));
+            await Task.CompletedTask;
+        });
+
+        _connection.On<RemoteSessionRequest>("StartRemoteSession", async (request) =>
+        {
+            RemoteSessionStarted?.Invoke(this, new RemoteSessionStartedEventArgs(request.SessionId, request.SessionType, request.MonitorIndex));
+            await Task.CompletedTask;
+        });
+
+        _connection.On<RemoteSessionRequest>("StopRemoteSession", async (request) =>
+        {
+            RemoteSessionStopped?.Invoke(this, new RemoteSessionStoppedEventArgs(request.SessionId));
+            await Task.CompletedTask;
+        });
+
+        _connection.On<RemoteSessionRequest>("SwitchRemoteSessionMonitor", async (request) =>
+        {
+            RemoteSessionMonitorChanged?.Invoke(this, new RemoteSessionMonitorChangedEventArgs(request.SessionId, request.MonitorIndex));
             await Task.CompletedTask;
         });
 
@@ -175,6 +200,19 @@ public class AgentHubClient : IAgentHubClient, IAsyncDisposable
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to send screen capture");
+        }
+    }
+
+    public async Task SendRemoteScreenFrameAsync(RemoteScreenFrameData data, CancellationToken ct = default)
+    {
+        if (!IsConnected) return;
+        try
+        {
+            await _connection!.InvokeAsync("SendRemoteScreenFrame", data, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to send remote screen frame");
         }
     }
 

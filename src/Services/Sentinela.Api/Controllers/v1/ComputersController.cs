@@ -10,6 +10,7 @@ public class ComputersController : ControllerBase
     private readonly IRepository<TimelineEntry> _timelineRepo;
     private readonly IRepository<ApplicationUsage> _appUsageRepo;
     private readonly IRepository<Alert> _alertRepo;
+    private readonly IRepository<EndpointSecurityStatus> _securityStatusRepo;
     private readonly IEventBus _eventBus;
     private readonly ICacheService _cache;
     private readonly IMapper _mapper;
@@ -20,6 +21,7 @@ public class ComputersController : ControllerBase
         IRepository<TimelineEntry> timelineRepo,
         IRepository<ApplicationUsage> appUsageRepo,
         IRepository<Alert> alertRepo,
+        IRepository<EndpointSecurityStatus> securityStatusRepo,
         IEventBus eventBus,
         ICacheService cache,
         IMapper mapper,
@@ -29,6 +31,7 @@ public class ComputersController : ControllerBase
         _timelineRepo = timelineRepo;
         _appUsageRepo = appUsageRepo;
         _alertRepo = alertRepo;
+        _securityStatusRepo = securityStatusRepo;
         _eventBus = eventBus;
         _cache = cache;
         _mapper = mapper;
@@ -83,7 +86,27 @@ public class ComputersController : ControllerBase
     {
         var computer = await _computerRepo.GetByIdAsync(id);
         if (computer is null) return NotFound();
-        return Ok(_mapper.Map<ComputerDetailDto>(computer));
+
+        var dto = _mapper.Map<ComputerDetailDto>(computer);
+
+        var status = await _securityStatusRepo.Query()
+            .Where(s => s.ComputerId == id && !s.IsDeleted)
+            .OrderByDescending(s => s.CollectedAt)
+            .FirstOrDefaultAsync();
+
+        if (status is not null)
+        {
+            dto.FirewallEnabled = status.FirewallEnabled;
+            dto.DefenderEnabled = status.DefenderEnabled || status.RealTimeProtectionEnabled;
+            dto.AntivirusEnabled = status.AntivirusEnabled;
+            dto.RealTimeProtectionEnabled = status.RealTimeProtectionEnabled;
+            dto.BitlockerEnabled = status.BitlockerEnabled;
+            dto.RdpEnabled = status.RdpEnabled;
+            dto.AntivirusProductName = status.AntivirusProductName;
+            dto.SecurityCollectedAt = status.CollectedAt.UtcDateTime;
+        }
+
+        return Ok(dto);
     }
 
     [HttpGet("{id}/timeline")]

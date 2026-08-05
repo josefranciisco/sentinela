@@ -76,13 +76,57 @@ public class CorrelationEngine : ICorrelationEngine
         ["RansomwareIndicators"] = new CorrelationPattern
         {
             Name = "Ransomware Indicators",
-            Description = "Multiple file modifications with encryption patterns",
+            Description = "Mass file renames with suspicious extensions detected",
             TimeWindow = TimeSpan.FromMinutes(5),
-            RequiredEvents = new[] { "FileModified", "FileModified", "FileModified", "FileRenamed" },
-            MinCounts = new Dictionary<string, int> { ["FileModified"] = 50, ["FileRenamed"] = 10 },
-            MinScore = 85,
+            RequiredEvents = new[] { "MassFileRename", "RansomwarePattern" },
+            MinCounts = new Dictionary<string, int> { ["MassFileRename"] = 1, ["RansomwarePattern"] = 1 },
+            MinScore = 95,
             Severity = Severity.Critical,
-            Tags = new[] { "ransomware", "malware" }
+            Tags = new[] { "ransomware", "malware", "encryption" }
+        },
+        ["MassRenameAttack"] = new CorrelationPattern
+        {
+            Name = "Mass File Rename Attack",
+            Description = "Large number of file renames in short period",
+            TimeWindow = TimeSpan.FromMinutes(2),
+            RequiredEvents = new[] { "MassFileRename" },
+            MinCounts = new Dictionary<string, int> { ["MassFileRename"] = 1 },
+            MinScore = 90,
+            Severity = Severity.Critical,
+            Tags = new[] { "ransomware", "file-system", "mass-rename" }
+        },
+        ["SuspiciousFileExtension"] = new CorrelationPattern
+        {
+            Name = "Suspicious Ransomware Extension",
+            Description = "File created with known ransomware extension",
+            TimeWindow = TimeSpan.FromMinutes(10),
+            RequiredEvents = new[] { "RansomwarePattern" },
+            MinCounts = new Dictionary<string, int> { ["RansomwarePattern"] = 3 },
+            MinScore = 85,
+            Severity = Severity.High,
+            Tags = new[] { "ransomware", "suspicious-file" }
+        },
+        ["CryptominerDetected"] = new CorrelationPattern
+        {
+            Name = "Cryptominer Detection",
+            Description = "Known mining process or suspicious high CPU activity detected",
+            TimeWindow = TimeSpan.FromMinutes(10),
+            RequiredEvents = new[] { "CryptominerDetected", "HighCpuProcess" },
+            MinCounts = new Dictionary<string, int> { ["CryptominerDetected"] = 1 },
+            MinScore = 90,
+            Severity = Severity.Critical,
+            Tags = new[] { "cryptominer", "malware", "cryptojacking" }
+        },
+        ["SuspiciousHighCpu"] = new CorrelationPattern
+        {
+            Name = "Suspicious High CPU Activity",
+            Description = "Multiple processes with sustained high CPU usage",
+            TimeWindow = TimeSpan.FromMinutes(5),
+            RequiredEvents = new[] { "HighCpuProcess", "HighCpuProcess", "HighCpuProcess" },
+            MinCounts = new Dictionary<string, int> { ["HighCpuProcess"] = 3 },
+            MinScore = 75,
+            Severity = Severity.High,
+            Tags = new[] { "performance", "suspicious", "cryptominer" }
         }
     };
 

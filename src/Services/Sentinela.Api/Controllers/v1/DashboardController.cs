@@ -10,6 +10,7 @@ public class DashboardController : ControllerBase
     private readonly IRepository<TimelineEntry> _timelineRepo;
     private readonly IRepository<Alert> _alertRepo;
     private readonly IRepository<ApplicationUsage> _appUsageRepo;
+    private readonly IRepository<Heartbeat> _heartbeatRepo;
     private readonly ICacheService _cache;
     private readonly IMapper _mapper;
     private readonly ILogger<DashboardController> _logger;
@@ -19,6 +20,7 @@ public class DashboardController : ControllerBase
         IRepository<TimelineEntry> timelineRepo,
         IRepository<Alert> alertRepo,
         IRepository<ApplicationUsage> appUsageRepo,
+        IRepository<Heartbeat> heartbeatRepo,
         ICacheService cache,
         IMapper mapper,
         ILogger<DashboardController> logger)
@@ -27,6 +29,7 @@ public class DashboardController : ControllerBase
         _timelineRepo = timelineRepo;
         _alertRepo = alertRepo;
         _appUsageRepo = appUsageRepo;
+        _heartbeatRepo = heartbeatRepo;
         _cache = cache;
         _mapper = mapper;
         _logger = logger;
@@ -63,13 +66,14 @@ public class DashboardController : ControllerBase
         var from = DateTime.UtcNow.AddDays(-days);
         var data = await _timelineRepo.Query()
             .Where(t => t.Timestamp >= from && !t.IsDeleted)
-            .GroupBy(t => new { t.Timestamp.Date, t.Timestamp.Hour })
+            .GroupBy(t => t.Timestamp.Hour)
             .Select(g => new HeatmapDto
             {
-                Date = g.Key.Date,
-                Hour = g.Key.Hour,
+                Date = DateTime.UtcNow.Date,
+                Hour = g.Key,
                 Count = g.Count()
             })
+            .OrderBy(h => h.Hour)
             .ToListAsync();
 
         return Ok(data);
@@ -167,9 +171,8 @@ public class DashboardController : ControllerBase
     public async Task<ActionResult<List<AvailabilityDto>>> GetAvailability([FromQuery] int days = 30)
     {
         var from = DateTime.UtcNow.AddDays(-days);
-        var data = await _computerRepo.Query()
-            .Where(c => !c.IsDeleted)
-            .SelectMany(c => c.Heartbeats.Where(h => h.Timestamp >= from))
+        var data = await _heartbeatRepo.Query()
+            .Where(h => h.Timestamp >= from)
             .GroupBy(h => h.Timestamp.Date)
             .Select(g => new AvailabilityDto
             {

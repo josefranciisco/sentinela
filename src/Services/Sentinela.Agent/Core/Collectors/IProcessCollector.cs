@@ -16,6 +16,8 @@ public class ProcessCollector : IProcessCollector, IDisposable
     private ManagementEventWatcher? _startWatcher;
     private ManagementEventWatcher? _stopWatcher;
     private readonly Dictionary<int, ProcessInfo> _processCache = new();
+    private readonly Dictionary<int, TimeSpan> _previousCpuTime = new();
+    private DateTime _lastCpuCheck = DateTime.MinValue;
     private readonly object _lock = new();
     
     public event EventHandler<ProcessChangeEventArgs>? ProcessStarted;
@@ -58,6 +60,7 @@ public class ProcessCollector : IProcessCollector, IDisposable
                         info.Duration = info.EndTime - info.StartTime;
                         ProcessStopped?.Invoke(this, new ProcessChangeEventArgs(ProcessChangeType.Stopped, info));
                         _processCache.Remove(processId);
+                        _previousCpuTime.Remove(processId);
                     }
                 }
             };
@@ -69,12 +72,17 @@ public class ProcessCollector : IProcessCollector, IDisposable
     public List<ProcessInfo> GetRunningProcesses()
     {
         var processes = new List<ProcessInfo>();
+        var now = DateTime.Now;
+        var elapsed = now - _lastCpuCheck;
+        
         try
         {
             foreach (var process in Process.GetProcesses())
             {
                 try
                 {
+                    var cpuUsage = CalculateCpuUsage(process, elapsed);
+                    
                     processes.Add(new ProcessInfo
                     {
                         ProcessId = process.Id,
@@ -82,16 +90,41 @@ public class ProcessCollector : IProcessCollector, IDisposable
                         WindowTitle = process.MainWindowTitle,
                         ExecutablePath = process.MainModule?.FileName ?? "",
                         StartTime = process.StartTime.ToLocalTime(),
-                        CpuUsage = 0,
+                        CpuUsage = cpuUsage,
                         MemoryUsage = process.WorkingSet64,
                         Username = GetProcessOwner(process.Id)
                     });
                 }
                 catch { }
             }
+            
+            _lastCpuCheck = now;
         }
         catch { }
         return processes;
+    }
+    
+    private double CalculateCpuUsage(Process process, TimeSpan elapsed)
+    {
+        try
+        {
+            var currentCpuTime = process.TotalProcessorTime;
+            
+            if (_previousCpuTime.TryGetValue(process.Id, out var previousTime) && elapsed.TotalMilliseconds > 0)
+            {
+                var cpuDelta = currentCpuTime - previousTime;
+                var cpuPercent = (cpuDelta.TotalMilliseconds / (elapsed.TotalMilliseconds * Environment.ProcessorCount)) * 100;
+                _previousCpuTime[process.Id] = currentCpuTime;
+                return Math.Round(Math.Min(cpuPercent, 100), 1);
+            }
+            
+            _previousCpuTime[process.Id] = currentCpuTime;
+            return 0;
+        }
+        catch
+        {
+            return 0;
+        }
     }
     
     public ProcessInfo? GetProcessById(int processId)

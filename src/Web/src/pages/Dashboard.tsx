@@ -1,26 +1,521 @@
-import { useState } from 'react'
-import { motion } from 'framer-motion'
+import { useState, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { useDashboardStats, useDashboardActivity, useDashboardTopApps, useDashboardAvailability, useDashboardHeatmap } from '@/hooks/useDashboard'
+import { useDashboardStats, useIncidents } from '@/hooks/useDashboard'
 import { formatRelative, formatDate } from '@/lib/utils'
-import { RefreshCw, Monitor, Users, AlertTriangle, Activity, Wifi, WifiOff } from 'lucide-react'
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area, LineChart, Line } from 'recharts'
+import { RefreshCw, Monitor, Users, AlertTriangle, Wifi, WifiOff, Tv, Search, Shield, Clock, ChevronRight, X, ExternalLink, AlertCircle, Info } from 'lucide-react'
+import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
 
-const severityColors: Record<string, string> = {
-  Critical: '#ef4444', High: '#f97316', Medium: '#eab308', Low: '#3b82f6', Info: '#6b7280',
+const riskColors: Record<string, string> = {
+  'Crítico': '#ef4444',
+  'Alto': '#f97316',
+  'Médio': '#eab308',
+  'Baixo': '#3b82f6',
+  'Informativo': '#6b7280',
+}
+
+const riskIcons: Record<string, string> = {
+  'Crítico': '🔴',
+  'Alto': '🟠',
+  'Médio': '🟡',
+  'Baixo': '🔵',
+  'Informativo': '⚪',
+}
+
+const eventTypeTranslations: Record<string, string> = {
+  'CryptominerDetected': 'Criptominerador Detectado',
+  'HighCpuProcess': 'Processo com CPU Alta',
+  'MassFileRename': 'Renomeação em Massa de Arquivos',
+  'RansomwarePattern': 'Padrão de Ransomware',
+  'MalwareDetected': 'Malware Detectado',
+  'AntivirusDisabled': 'Antivírus Desativado',
+  'AntivirusOutdated': 'Antivírus Desatualizado',
+  'FailedLogon': 'Falha de Login',
+  'USBConnected': 'USB Conectado',
+  'USBDisconnected': 'USB Desconectado',
+  'FileCopy': 'Cópia de Arquivo',
+  'SoftwareInstalled': 'Software Instalado',
+  'SoftwareUninstalled': 'Software Desinstalado',
+  'SuspiciousNetworkActivity': 'Atividade de Rede Suspeita',
+}
+
+const eventDescriptionTranslations: Record<string, string> = {
+  'Mass file rename detected': 'Renomeação em massa detectada',
+  'files renamed': 'arquivos renomeados',
+  'Suspicious file with ransomware extension': 'Arquivo suspeito com extensão de ransomware',
+  'Antivirus disabled on': 'Antivírus desativado em',
+  'Antivirus protection disabled': 'Proteção do antivírus desativada',
+  'Cryptominer detected': 'Criptominerador detectado',
+  'Suspicious high CPU process': 'Processo com CPU alta suspeito',
+  'USB device connected': 'Dispositivo USB conectado',
+  'USB device disconnected': 'Dispositivo USB desconectado',
+  'File copied': 'Arquivo copiado',
+  'files': 'arquivos',
+  'renamed': 'renomeados',
+}
+
+function translateEventType(eventType: string): string {
+  return eventTypeTranslations[eventType] || eventType
+}
+
+function translateDescription(description: string): string {
+  let translated = description
+  for (const [en, pt] of Object.entries(eventDescriptionTranslations)) {
+    translated = translated.replace(new RegExp(en, 'g'), pt)
+  }
+  return translated
+}
+
+function NocOverlay({ onClose, stats }: { onClose: () => void; stats: any }) {
+  const { t } = useTranslation()
+  const [currentView, setCurrentView] = useState(0)
+  const [time, setTime] = useState(new Date())
+
+  useEffect(() => {
+    const interval = setInterval(() => setTime(new Date()), 1000)
+    return () => clearInterval(interval)
+  }, [])
+
+  useEffect(() => {
+    const viewInterval = setInterval(() => setCurrentView((prev) => (prev + 1) % 3), 10000)
+    return () => clearInterval(viewInterval)
+  }, [])
+
+  const views = [
+    { id: 'overview', label: t('noc.overview') },
+    { id: 'alerts', label: t('noc.criticalAlerts') },
+    { id: 'stats', label: t('noc.statistics') },
+  ]
+
+  const donutData = [
+    { name: t('noc.online'), value: stats?.onlineComputers ?? 0, color: '#22c55e' },
+    { name: t('noc.offline'), value: stats?.offlineComputers ?? 0, color: '#ef4444' },
+    { name: t('noc.away'), value: (stats?.totalComputers ?? 0) - (stats?.onlineComputers ?? 0) - (stats?.offlineComputers ?? 0), color: '#eab308' },
+  ]
+
+  return (
+    <div className="fixed inset-0 z-[70] bg-background overflow-y-auto">
+      <div className="min-h-screen p-8 bg-background">
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-4">
+            <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-blue-500">
+              {t('noc.nocMode')}
+            </h1>
+            <div className="flex gap-2">
+              {views.map((v, i) => (
+                <button
+                  key={v.id}
+                  onClick={() => setCurrentView(i)}
+                  className={`px-3 py-1 rounded-lg text-sm transition-colors ${currentView === i ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}
+                >
+                  {v.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center gap-6">
+            <span className="text-2xl font-mono font-bold">{time.toLocaleTimeString('pt-BR')}</span>
+            <Button variant="outline" onClick={onClose}>{t('noc.exitFullscreen')}</Button>
+          </div>
+        </div>
+
+        {views[currentView].id === 'overview' && (
+          <div className="space-y-8">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+              {[
+                { label: t('noc.totalComputers'), value: String(stats?.totalComputers ?? 0), icon: Monitor, color: 'from-primary to-blue-500' },
+                { label: t('noc.online'), value: String(stats?.onlineComputers ?? 0), icon: Wifi, color: 'from-emerald-500 to-green-500' },
+                { label: t('noc.offline'), value: String(stats?.offlineComputers ?? 0), icon: WifiOff, color: 'from-red-500 to-rose-500' },
+                { label: t('noc.criticalAlerts'), value: String(stats?.totalAlerts ?? 0), icon: AlertTriangle, color: 'from-amber-500 to-orange-500' },
+              ].map((stat) => (
+                <Card key={stat.label} className="bg-card/80 backdrop-blur border-border/50">
+                  <CardContent className="p-6 text-center">
+                    <div className={`inline-flex p-3 rounded-xl bg-gradient-to-br ${stat.color} text-white mb-3`}>
+                      <stat.icon className="h-7 w-7" />
+                    </div>
+                    <p className="text-4xl font-bold">{stat.value}</p>
+                    <p className="text-sm text-muted-foreground uppercase tracking-wider mt-1">{stat.label}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card className="bg-card/80 backdrop-blur border-border/50">
+                <CardContent className="p-6">
+                  <h3 className="text-lg font-semibold mb-4">{t('noc.statusDistribution')}</h3>
+                  <div className="flex items-center gap-8">
+                    <ResponsiveContainer width={200} height={200}>
+                      <PieChart>
+                        <Pie data={donutData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} dataKey="value">
+                          {donutData.map((entry, idx) => (
+                            <Cell key={idx} fill={entry.color} />
+                          ))}
+                        </Pie>
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="space-y-3">
+                      {donutData.map((d) => (
+                        <div key={d.name} className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: d.color }} />
+                          <span className="text-sm">{d.name}: <strong>{d.value}</strong></span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="bg-card/80 backdrop-blur border-border/50">
+                <CardContent className="p-6">
+                  <h3 className="text-lg font-semibold mb-4">{t('noc.recentActivity')}</h3>
+                  <div className="space-y-3 text-sm text-muted-foreground">
+                    <span>{t('noc.noRecentActivity', 'Nenhuma atividade recente')}</span>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        )}
+
+        {views[currentView].id === 'alerts' && (
+          <div className="space-y-4">
+            <h2 className="text-xl font-bold flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              {t('noc.activeCriticalAlerts')}
+            </h2>
+            <p className="text-sm text-muted-foreground">{t('noc.noCriticalAlerts', 'Nenhum alerta crítico no momento')}</p>
+          </div>
+        )}
+
+        {views[currentView].id === 'stats' && (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+            {[
+              { label: t('noc.avgResponseTime'), value: '1.2s', change: '+0.1s' },
+              { label: t('noc.eventsPerMin'), value: '247', change: '+12%' },
+              { label: t('noc.activeSessions'), value: '38', change: '-2' },
+              { label: t('noc.bandwidthUsage'), value: '2.4 Gbps', change: '+8%' },
+              { label: t('noc.cpuUsageAvg'), value: '42%', change: '+3%' },
+              { label: t('noc.memoryUsage'), value: '68%', change: '-1%' },
+              { label: t('noc.diskIo'), value: '156 MB/s', change: '+5%' },
+              { label: t('noc.networkLatency'), value: '4ms', change: '-0.5ms' },
+            ].map((stat) => (
+              <Card key={stat.label} className="bg-card/80 backdrop-blur border-border/50">
+                <CardContent className="p-5 text-center">
+                  <p className="text-muted-foreground text-sm uppercase tracking-wider mb-1">{stat.label}</p>
+                  <p className="text-3xl font-bold">{stat.value}</p>
+                  <p className={`text-sm mt-1 ${stat.change.startsWith('+') ? 'text-emerald-400' : 'text-destructive'}`}>{stat.change}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function IncidentCard({ incident, onInvestigate }: { incident: any; onInvestigate: (incident: any) => void }) {
+  const { t } = useTranslation()
+  const [expanded, setExpanded] = useState(false)
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="border rounded-lg overflow-hidden"
+      style={{ borderColor: riskColors[incident.riskLevel] || '#6b7280' }}
+    >
+      <div 
+        className="p-4 cursor-pointer hover:bg-muted/50 transition-colors"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3 flex-1 min-w-0">
+            <span className="text-xl mt-0.5">{riskIcons[incident.riskLevel]}</span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <Shield className="h-4 w-4 shrink-0" style={{ color: riskColors[incident.riskLevel] }} />
+                <span className="font-semibold text-sm">{incident.title}</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Monitor className="h-3 w-3" />
+                <span className="font-medium">{incident.computerName}</span>
+                <span>•</span>
+                <Clock className="h-3 w-3" />
+                <span>{formatRelative(incident.timestamp)}</span>
+                <span>•</span>
+                <span>{incident.eventCount} evento(s)</span>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span 
+              className="px-2 py-0.5 rounded-full text-xs font-medium text-white"
+              style={{ backgroundColor: riskColors[incident.riskLevel] }}
+            >
+              {incident.riskLevel}
+            </span>
+            <ChevronRight className={`h-4 w-4 transition-transform ${expanded ? 'rotate-90' : ''}`} />
+          </div>
+        </div>
+      </div>
+      
+      {expanded && (
+        <motion.div
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: 'auto', opacity: 1 }}
+          className="border-t bg-muted/30"
+        >
+          <div className="p-4 space-y-3">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-2">Evidências:</p>
+              <div className="space-y-1.5">
+                {incident.events?.slice(0, 5).map((event: any, idx: number) => (
+                  <div key={idx} className="flex items-start gap-2 text-sm">
+                    <div 
+                      className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0"
+                      style={{ backgroundColor: riskColors[event.severity] || '#6b7280' }}
+                    />
+                    <div>
+                      <span className="font-medium">{translateEventType(event.eventType)}</span>
+                      {event.description && (
+                        <span className="text-muted-foreground ml-1">- {translateDescription(event.description)}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {incident.events?.length > 5 && (
+                  <p className="text-xs text-muted-foreground">+{incident.events.length - 5} mais eventos</p>
+                )}
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <Button size="sm" variant="outline" onClick={() => onInvestigate(incident)}>
+                <Search className="h-3.5 w-3.5 mr-1" />
+                Investigar
+              </Button>
+            </div>
+          </div>
+        </motion.div>
+      )}
+    </motion.div>
+  )
+}
+
+function InvestigationModal({ incident, onClose }: { incident: any; onClose: () => void }) {
+  const { t } = useTranslation()
+  
+  if (!incident) return null
+
+  const getRecommendations = (riskLevel: string, eventTypes: string[]) => {
+    const recommendations = []
+    
+    if (riskLevel === 'Crítico') {
+      recommendations.push({
+        priority: 'Alta',
+        action: 'Isolar máquina da rede imediatamente',
+        description: 'Desconecte o cabo de rede e/ou desative o Wi-Fi para prevenir propagação.'
+      })
+      recommendations.push({
+        priority: 'Alta',
+        action: 'Verificar backup dos dados',
+        description: 'Confirme que backups estão íntegros e não foram comprometidos.'
+      })
+    }
+    
+    if (eventTypes.includes('MassFileRename') || eventTypes.includes('RansomwarePattern')) {
+      recommendations.push({
+        priority: 'Alta',
+        action: 'Não pagar resgate',
+        description: 'Pagamento não garante recuperação e financia criminosos.'
+      })
+      recommendations.push({
+        priority: 'Média',
+        action: 'Verificar fonte de infecção',
+        description: 'Analisar e-mails, downloads ou dispositivos USB recentes.'
+      })
+    }
+    
+    if (eventTypes.includes('AntivirusDisabled')) {
+      recommendations.push({
+        priority: 'Alta',
+        action: 'Reativar proteção antivírus',
+        description: 'Verificar se foi desativado manualmente ou por malware.'
+      })
+      recommendations.push({
+        priority: 'Média',
+        action: 'Executar scan completo',
+        description: 'Iniciar verificação completa do sistema.'
+      })
+    }
+    
+    if (eventTypes.includes('CryptominerDetected') || eventTypes.includes('HighCpuProcess')) {
+      recommendations.push({
+        priority: 'Alta',
+        action: 'Identificar e encerrar processo',
+        description: 'Localizar o processo suspeito no Gerenciador de Tarefas.'
+      })
+      recommendations.push({
+        priority: 'Média',
+        action: 'Verificar programas instalados recentemente',
+        description: 'Desinstalar software suspeito ou desconhecido.'
+      })
+    }
+    
+    if (eventTypes.includes('USBConnected') || eventTypes.includes('FileCopy')) {
+      recommendations.push({
+        priority: 'Baixa',
+        action: 'Verificar dispositivo USB',
+        description: 'Analisar conteúdo e origem do dispositivo conectado.'
+      })
+    }
+    
+    if (recommendations.length === 0) {
+      recommendations.push({
+        priority: 'Média',
+        action: 'Revisar logs do sistema',
+        description: 'Analisar eventos detalhados para identificar a causa raiz.'
+      })
+    }
+    
+    return recommendations
+  }
+
+  const eventTypes = [...new Set(incident.events?.map((e: any) => e.eventType) || [])]
+  const recommendations = getRecommendations(incident.riskLevel, eventTypes)
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+        onClick={onClose}
+      >
+        <motion.div
+          initial={{ scale: 0.95, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.95, opacity: 0 }}
+          className="bg-background rounded-xl shadow-xl w-full max-w-2xl max-h-[85vh] overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between p-4 border-b">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">{riskIcons[incident.riskLevel]}</span>
+              <div>
+                <h2 className="font-semibold">{incident.title}</h2>
+                <p className="text-sm text-muted-foreground">{incident.computerName}</p>
+              </div>
+            </div>
+            <Button variant="ghost" size="sm" onClick={onClose}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          
+          <div className="p-4 overflow-y-auto max-h-[calc(85vh-140px)] space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-3 rounded-lg bg-muted/50">
+                <p className="text-xs text-muted-foreground mb-1">Nível de Risco</p>
+                <div className="flex items-center gap-2">
+                  <span 
+                    className="px-2 py-0.5 rounded-full text-xs font-medium text-white"
+                    style={{ backgroundColor: riskColors[incident.riskLevel] }}
+                  >
+                    {incident.riskLevel}
+                  </span>
+                </div>
+              </div>
+              <div className="p-3 rounded-lg bg-muted/50">
+                <p className="text-xs text-muted-foreground mb-1">Horário</p>
+                <p className="text-sm font-medium">{formatDate(incident.timestamp)}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-muted/50">
+                <p className="text-xs text-muted-foreground mb-1">Total de Eventos</p>
+                <p className="text-sm font-medium">{incident.eventCount}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-muted/50">
+                <p className="text-xs text-muted-foreground mb-1">Tipos de Evento</p>
+                <p className="text-sm font-medium">{eventTypes.length} tipo(s)</p>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-medium mb-2 flex items-center gap-2">
+                <AlertCircle className="h-4 w-4" />
+                Eventos Detectados
+              </h3>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {incident.events?.map((event: any, idx: number) => (
+                  <div key={idx} className="flex items-start gap-3 p-2 rounded-lg bg-muted/30 text-sm">
+                    <div 
+                      className="w-2 h-2 rounded-full mt-1.5 shrink-0"
+                      style={{ backgroundColor: riskColors[event.severity] || '#6b7280' }}
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">{translateEventType(event.eventType)}</span>
+                        <span className="text-xs text-muted-foreground">{formatRelative(event.timestamp)}</span>
+                      </div>
+                      {event.description && (
+                        <p className="text-xs text-muted-foreground mt-0.5">{translateDescription(event.description)}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-medium mb-2 flex items-center gap-2">
+                <Info className="h-4 w-4" />
+                Recomendações
+              </h3>
+              <div className="space-y-2">
+                {recommendations.map((rec, idx) => (
+                  <div key={idx} className="p-3 rounded-lg border bg-background">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${
+                        rec.priority === 'Alta' ? 'bg-red-100 text-red-700' :
+                        rec.priority === 'Média' ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-blue-100 text-blue-700'
+                      }`}>
+                        {rec.priority}
+                      </span>
+                      <span className="font-medium text-sm">{rec.action}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{rec.description}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          
+          <div className="p-4 border-t flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={onClose}>
+              Fechar
+            </Button>
+            <Button size="sm">
+              <ExternalLink className="h-3.5 w-3.5 mr-1" />
+              Abrir Detalhes da Máquina
+            </Button>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  )
 }
 
 export function Dashboard() {
   const { t } = useTranslation()
   const [autoRefresh, setAutoRefresh] = useState(false)
-  const { data: stats, isLoading: statsLoading } = useDashboardStats()
-  const { data: activity } = useDashboardActivity()
-  const { data: topApps } = useDashboardTopApps()
-  const { data: availability } = useDashboardAvailability()
-  const { data: heatmap } = useDashboardHeatmap()
+  const [nocMode, setNocMode] = useState(false)
+  const [investigatingIncident, setInvestigatingIncident] = useState<any>(null)
+  const { data: stats } = useDashboardStats()
+  const { data: incidents } = useIncidents(5)
+
+  if (nocMode) return <NocOverlay onClose={() => setNocMode(false)} stats={stats} />
 
   const statCards = [
     { label: t('dashboard.totalComputers'), value: stats?.totalComputers ?? 0, icon: Monitor, color: 'from-primary to-blue-500' },
@@ -48,6 +543,9 @@ export function Dashboard() {
             <input type="checkbox" checked={autoRefresh} onChange={() => setAutoRefresh(!autoRefresh)} className="rounded" />
             {t('dashboard.autoRefresh')}
           </label>
+          <Button variant="outline" size="sm" onClick={() => setNocMode(true)}>
+            <Tv className="h-4 w-4 mr-1" /> {t('dashboard.nocMode', 'Modo NOC')}
+          </Button>
           <Button variant="outline" size="sm"><RefreshCw className="h-4 w-4" /></Button>
         </div>
       </div>
@@ -74,19 +572,29 @@ export function Dashboard() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2">
-          <CardHeader><CardTitle className="text-base">{t('dashboard.activityTimeline')}</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Shield className="h-4 w-4" />
+              Centro de Incidentes
+            </CardTitle>
+          </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {activity?.slice(0, 8).map((event: any) => (
-                <div key={event.id} className="flex items-start gap-3 text-sm">
-                  <div className="w-2 h-2 mt-1.5 rounded-full shrink-0" style={{ backgroundColor: severityColors[event.severity] || '#6b7280' }} />
-                  <div className="flex-1 min-w-0">
-                    <p className="truncate">{event.description}</p>
-                    <p className="text-xs text-muted-foreground">{event.computerName} &middot; {formatRelative(event.timestamp)}</p>
-                  </div>
+              {incidents && incidents.length > 0 ? (
+                incidents.map((incident: any) => (
+                  <IncidentCard 
+                    key={incident.id} 
+                    incident={incident} 
+                    onInvestigate={setInvestigatingIncident}
+                  />
+                ))
+              ) : (
+                <div className="text-center py-8">
+                  <Shield className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
+                  <p className="text-sm text-muted-foreground">Nenhum incidente ativo</p>
+                  <p className="text-xs text-muted-foreground/70 mt-1">Todos os sistemas estão seguros</p>
                 </div>
-              ))}
-              {(!activity || activity.length === 0) && <p className="text-sm text-muted-foreground text-center py-4">{t('dashboard.noRecentActivity')}</p>}
+              )}
             </div>
           </CardContent>
         </Card>
@@ -114,55 +622,13 @@ export function Dashboard() {
           </CardContent>
         </Card>
       </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader><CardTitle className="text-base">{t('dashboard.topApplications')}</CardTitle></CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={topApps?.slice(0, 8) || []} layout="vertical">
-                <XAxis type="number" hide />
-                <YAxis type="category" dataKey="name" width={140} tick={{ fontSize: 12 }} />
-                <Tooltip />
-                <Bar dataKey="count" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader><CardTitle className="text-base">{t('dashboard.availability')}</CardTitle></CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={250}>
-              <AreaChart data={availability || []}>
-                <defs>
-                  <linearGradient id="availGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                <YAxis domain={[90, 100]} tick={{ fontSize: 11 }} />
-                <Tooltip />
-                <Area type="monotone" dataKey="percentage" stroke="hsl(var(--primary))" fill="url(#availGrad)" strokeWidth={2} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader><CardTitle className="text-base">{t('dashboard.activityHeatmap')}</CardTitle></CardHeader>
-        <CardContent>
-          <ResponsiveContainer width="100%" height={160}>
-            <LineChart data={heatmap || []}>
-              <XAxis dataKey="hour" tick={{ fontSize: 11 }} />
-              <Tooltip />
-              <Line type="monotone" dataKey="value" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
+      
+      {investigatingIncident && (
+        <InvestigationModal 
+          incident={investigatingIncident} 
+          onClose={() => setInvestigatingIncident(null)} 
+        />
+      )}
     </div>
   )
 }

@@ -39,6 +39,9 @@ public class ComputerConfiguration : IEntityTypeConfiguration<Computer>
         builder.Property(c => c.AgentVersion)
             .HasMaxLength(50);
 
+        builder.Property(c => c.MonitorCount)
+            .HasDefaultValue(1);
+
         builder.Property(c => c.Notes)
             .HasMaxLength(2000);
 

@@ -281,6 +281,7 @@ public class HeartbeatData
     public int Uptime { get; set; }
     public string AgentVersion { get; set; } = "";
     public bool IsAgentUpdated { get; set; }
+    public int MonitorCount { get; set; } = 1;
 }
 
 public class TimelineEntryData
@@ -359,6 +360,51 @@ public class AgentUpdateEventArgs : EventArgs
 {
     public string UpdateJson { get; }
     public AgentUpdateEventArgs(string updateJson) => UpdateJson = updateJson;
+}
+
+public class RemoteSessionRequest
+{
+    public string SessionId { get; set; } = string.Empty;
+    public string SessionType { get; set; } = "view";
+    public int? MonitorIndex { get; set; }
+}
+
+public class RemoteSessionStartedEventArgs : EventArgs
+{
+    public string SessionId { get; }
+    public string SessionType { get; }
+    public int? MonitorIndex { get; }
+    public RemoteSessionStartedEventArgs(string sessionId, string sessionType, int? monitorIndex = null)
+    {
+        SessionId = sessionId;
+        SessionType = sessionType;
+        MonitorIndex = monitorIndex;
+    }
+}
+
+public class RemoteSessionStoppedEventArgs : EventArgs
+{
+    public string SessionId { get; }
+    public RemoteSessionStoppedEventArgs(string sessionId) => SessionId = sessionId;
+}
+
+public class RemoteSessionMonitorChangedEventArgs : EventArgs
+{
+    public string SessionId { get; }
+    public int? MonitorIndex { get; }
+    public RemoteSessionMonitorChangedEventArgs(string sessionId, int? monitorIndex)
+    {
+        SessionId = sessionId;
+        MonitorIndex = monitorIndex;
+    }
+}
+
+public class RemoteScreenFrameData
+{
+    public string SessionId { get; set; } = string.Empty;
+    public byte[] FrameData { get; set; } = Array.Empty<byte>();
+    public long FrameNumber { get; set; }
+    public DateTime Timestamp { get; set; }
 }
 
 public class ConfigurationData

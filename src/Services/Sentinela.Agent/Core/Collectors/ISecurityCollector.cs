@@ -24,10 +24,10 @@ public class SecurityCollector : ISecurityCollector
             FirewallEnabled = CheckFirewall(),
             DefenderEnabled = defender.RealTimeProtectionEnabled,
             AntivirusEnabled = defender.AntivirusEnabled || thirdParty.Any(p => p.IsEnabled),
-            RealTimeProtectionEnabled = defender.RealTimeProtectionEnabled,
-            AntivirusSignatureAgeDays = defender.AntivirusSignatureAgeDays,
-            AntivirusSignatureLastUpdated = defender.AntivirusSignatureLastUpdated,
-            AntivirusProductName = defender.ProductName ?? thirdParty.FirstOrDefault()?.DisplayName ?? "Unknown",
+            RealTimeProtectionEnabled = defender.RealTimeProtectionEnabled || thirdParty.Any(p => p.IsEnabled),
+            AntivirusSignatureAgeDays = thirdParty.Any(p => p.IsEnabled && p.IsUpToDate) ? 0 : defender.AntivirusSignatureAgeDays,
+            AntivirusSignatureLastUpdated = thirdParty.Any(p => p.IsEnabled && p.IsUpToDate) ? DateTime.UtcNow : defender.AntivirusSignatureLastUpdated,
+            AntivirusProductName = SimplifyProductName(thirdParty.FirstOrDefault(p => p.IsEnabled)?.DisplayName) ?? defender.ProductName ?? "Unknown",
             ThirdPartyProducts = thirdParty,
             BitlockerEnabled = await CheckBitlockerAsync(),
             RdpEnabled = CheckRdp(),
@@ -375,6 +375,13 @@ public class SecurityCollector : ISecurityCollector
         }
         catch { }
         return services;
+    }
+
+    private static string? SimplifyProductName(string? name)
+    {
+        if (string.IsNullOrEmpty(name)) return null;
+        if (name.Contains("Bitdefender", StringComparison.OrdinalIgnoreCase)) return "Bitdefender";
+        return name;
     }
 
     private class DefenderStatus

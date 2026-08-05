@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Drawing;
+using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using Sentinela.ScreenCapture.Interfaces;
 
@@ -25,8 +27,9 @@ public class CaptureService : ICaptureService
         {
             var rect = BoundingRectFromMonitors();
             var (data, w, h) = CaptureGdi(rect.X, rect.Y, rect.Width, rect.Height);
+            var monitorLabel = $"{_monitors.Count} Monitores";
             sw.Stop();
-            return Task.FromResult(new CaptureResult(data, w, h, "All Monitors", sw.ElapsedMilliseconds));
+            return Task.FromResult(new CaptureResult(data, w, h, monitorLabel, sw.ElapsedMilliseconds));
         }
 
         var monitor = options.MonitorIndex.HasValue && options.MonitorIndex >= 0 && options.MonitorIndex < _monitors.Count
@@ -43,9 +46,42 @@ public class CaptureService : ICaptureService
         using var bitmap = new System.Drawing.Bitmap(width, height);
         using var graphics = System.Drawing.Graphics.FromImage(bitmap);
         graphics.CopyFromScreen(x, y, 0, 0, new System.Drawing.Size(width, height));
-        using var ms = new MemoryStream();
-        bitmap.Save(ms, System.Drawing.Imaging.ImageFormat.Jpeg);
-        return (ms.ToArray(), width, height);
+        var (cropX, cropY, cropW, cropH) = FindContentBounds(bitmap, 15);
+        if (cropW > 0 && cropH > 0 && (cropX > 0 || cropY > 0 || cropW < width || cropH < height))
+        {
+            using var cropped = bitmap.Clone(new System.Drawing.Rectangle(cropX, cropY, cropW, cropH), bitmap.PixelFormat);
+            using var ms = new MemoryStream();
+            cropped.Save(ms, ImageFormat.Png);
+            return (ms.ToArray(), cropW, cropH);
+        }
+        using var ms2 = new MemoryStream();
+        bitmap.Save(ms2, ImageFormat.Png);
+        return (ms2.ToArray(), width, height);
+    }
+
+    private static (int x, int y, int w, int h) FindContentBounds(Bitmap bmp, byte threshold)
+    {
+        var w = bmp.Width;
+        var h = bmp.Height;
+        int left = w, right = -1, top = h, bottom = -1;
+
+        for (var y = 0; y < h; y++)
+        {
+            for (var x = 0; x < w; x++)
+            {
+                var p = bmp.GetPixel(x, y);
+                if (p.R > threshold || p.G > threshold || p.B > threshold)
+                {
+                    if (x < left) left = x;
+                    if (x > right) right = x;
+                    if (y < top) top = y;
+                    if (y > bottom) bottom = y;
+                }
+            }
+        }
+
+        if (right < 0) return (0, 0, w, h);
+        return (left, top, right - left + 1, bottom - top + 1);
     }
 
     private static MonitorRect BoundingRectFromMonitors()
@@ -106,6 +142,8 @@ public class CaptureService : ICaptureService
         return 1.0;
     }
 
+    private record MonitorRect(int X, int Y, int Width, int Height);
+
     [StructLayout(LayoutKind.Sequential)]
     private struct RECT { public int X, Y, Width, Height; }
 
@@ -119,8 +157,6 @@ public class CaptureService : ICaptureService
         [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
         public string szDevice;
     }
-
-    private record MonitorRect(int X, int Y, int Width, int Height);
 
     private delegate bool MonitorEnumDelegate(IntPtr hMonitor, IntPtr hdcMonitor, IntPtr lprcMonitor, IntPtr dwData);
     [DllImport("user32.dll")] private static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lprcClip, MonitorEnumDelegate lpfnEnum, IntPtr dwData);

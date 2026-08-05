@@ -44,6 +44,7 @@ export function ScreenCapture() {
   const [search, setSearch] = useState('')
   const [selectedComputerFilter, setSelectedComputerFilter] = useState('')
   const [zoomed, setZoomed] = useState(false)
+  const [zoomLevel, setZoomLevel] = useState(1)
   const [capturing, setCapturing] = useState(false)
   const [progress, setProgress] = useState(0)
   const [confirmDelete, setConfirmDelete] = useState<Screenshot | null>(null)
@@ -303,23 +304,33 @@ export function ScreenCapture() {
 
       {zoomed ? (
         <div className="fixed inset-0 z-[60] bg-black/90 flex flex-col" onClick={() => setZoomed(false)}>
-          <div className="flex items-center justify-between p-4 text-white">
+          <div className="flex items-center justify-between p-4 text-white" onClick={(e) => e.stopPropagation()}>
             <span className="text-sm text-white/70">{viewCapture?.monitorName} - {viewCapture?.width}x{viewCapture?.height}</span>
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" className="text-white hover:text-white/80" onClick={(e) => { e.stopPropagation(); viewCapture && handleDownload(viewCapture) }}>
+              <Button variant="ghost" size="sm" className="text-white hover:text-white/80" onClick={() => setZoomLevel((z) => Math.max(0.25, z - 0.25))}>
+                <span className="text-lg font-bold">-</span>
+              </Button>
+              <span className="text-sm text-white/70 min-w-[4rem] text-center">{Math.round(zoomLevel * 100)}%</span>
+              <Button variant="ghost" size="sm" className="text-white hover:text-white/80" onClick={() => setZoomLevel((z) => Math.min(4, z + 0.25))}>
+                <span className="text-lg font-bold">+</span>
+              </Button>
+              <Button variant="ghost" size="sm" className="text-white hover:text-white/80 text-xs" onClick={() => setZoomLevel(1)}>
+                1:1
+              </Button>
+              <Button variant="ghost" size="sm" className="text-white hover:text-white/80" onClick={() => { viewCapture && handleDownload(viewCapture) }}>
                 <Download className="h-4 w-4" />
               </Button>
-              <Button variant="ghost" size="sm" className="text-white hover:text-white/80" onClick={(e) => { e.stopPropagation(); setZoomed(false) }}>
+              <Button variant="ghost" size="sm" className="text-white hover:text-white/80" onClick={() => { setZoomed(false); setZoomLevel(1) }}>
                 <X className="h-4 w-4" />
               </Button>
             </div>
           </div>
-          <div className="flex-1 flex items-center justify-center p-4" onClick={(e) => e.stopPropagation()}>
-            <img ref={imgRef} src={viewCapture?.imageUrl} alt="" className="max-w-full max-h-full object-contain" />
+          <div className="flex-1 flex items-center justify-center p-4 overflow-auto" onClick={(e) => e.stopPropagation()}>
+            <img ref={imgRef} src={viewCapture?.imageUrl} alt="" className="max-w-none max-h-none" style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'center center' }} />
           </div>
         </div>
       ) : (
-        <Dialog open={!!viewCapture} onClose={() => { setViewCapture(null); setZoomed(false) }}>
+        <Dialog open={!!viewCapture} onClose={() => { setViewCapture(null); setZoomed(false); setZoomLevel(1) }}>
           <div className="p-4">
             <DialogHeader>
               <div className="flex items-center justify-between">

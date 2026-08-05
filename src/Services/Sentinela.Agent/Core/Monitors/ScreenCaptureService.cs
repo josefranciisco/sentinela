@@ -13,6 +13,8 @@ public interface IScreenCaptureService
     Task<CapturedScreen?> CaptureAsync();
     Task<byte[]?> CaptureEncryptedAsync();
     Task<byte[]?> CaptureCompressedAsync(int quality = 50);
+    Task<byte[]?> CaptureForStreamingAsync(int maxWidth = 1920, int quality = 50, int? monitorIndex = null);
+    IReadOnlyList<MonitorInfo> GetMonitors();
 }
 
 public class ScreenCaptureService : IScreenCaptureService, IDisposable
@@ -121,8 +123,106 @@ public class ScreenCaptureService : IScreenCaptureService, IDisposable
         });
     }
     
+    public Task<byte[]?> CaptureForStreamingAsync(int maxWidth = 1920, int quality = 50, int? monitorIndex = null)
+    {
+        quality = Math.Clamp(quality, 20, 80);
+        try
+        {
+            var monitors = GetMonitors();
+            Rectangle bounds;
+            if (monitorIndex.HasValue && monitorIndex >= 0 && monitorIndex < monitors.Count)
+            {
+                var m = monitors[monitorIndex.Value];
+                bounds = new Rectangle(m.X, m.Y, m.Width, m.Height);
+            }
+            else
+            {
+                bounds = BoundingRectFromMonitors(monitors);
+            }
+
+            using var bitmap = new Bitmap(bounds.Width, bounds.Height);
+            using var graphics = Graphics.FromImage(bitmap);
+            graphics.CopyFromScreen(bounds.X, bounds.Y, 0, 0, bounds.Size);
+
+            var scale = maxWidth > 0 && bounds.Width > maxWidth ? (double)maxWidth / bounds.Width : 1.0;
+            using var resized = scale < 1.0
+                ? new Bitmap(bitmap, (int)(bounds.Width * scale), (int)(bounds.Height * scale))
+                : new Bitmap(bitmap, bounds.Width, bounds.Height);
+            using var ms = new MemoryStream();
+
+            var encoderParams = new EncoderParameters(1);
+            encoderParams.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, quality);
+            var jpegCodec = GetEncoderInfo("image/jpeg");
+
+            if (jpegCodec != null)
+            {
+                resized.Save(ms, jpegCodec, encoderParams);
+            }
+            else
+            {
+                resized.Save(ms, ImageFormat.Jpeg);
+            }
+
+            return Task.FromResult<byte[]?>(ms.ToArray());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to capture screen for streaming");
+            return Task.FromResult<byte[]?>(null);
+        }
+    }
+
+    public IReadOnlyList<MonitorInfo> GetMonitors()
+    {
+        var monitors = new List<MonitorInfo>();
+        try
+        {
+            EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero,
+                (hMonitor, hdcMonitor, lprcMonitor, dwData) =>
+                {
+                    var mi = new MONITORINFOEX();
+                    mi.cbSize = Marshal.SizeOf(typeof(MONITORINFOEX));
+                    if (GetMonitorInfo(hMonitor, ref mi))
+                    {
+                        var name = new string(mi.szDevice).TrimEnd('\0');
+                        var rect = mi.rcMonitor;
+                        var isPrimary = (mi.dwFlags & 1) != 0;
+                        monitors.Add(new MonitorInfo(name,
+                            rect.Right - rect.Left, rect.Bottom - rect.Top,
+                            rect.Left, rect.Top, isPrimary));
+                    }
+                    return true;
+                }, IntPtr.Zero);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to enumerate monitors");
+            monitors.Add(new MonitorInfo("Primary", 1920, 1080, 0, 0, true));
+        }
+        if (monitors.Count == 0)
+            monitors.Add(new MonitorInfo("Primary", 1920, 1080, 0, 0, true));
+        return monitors;
+    }
+
+    private static Rectangle BoundingRectFromMonitors(IReadOnlyList<MonitorInfo> monitors)
+    {
+        var minX = int.MaxValue; var minY = int.MaxValue;
+        var maxX = int.MinValue; var maxY = int.MinValue;
+        foreach (var m in monitors)
+        {
+            minX = Math.Min(minX, m.X); minY = Math.Min(minY, m.Y);
+            maxX = Math.Max(maxX, m.X + m.Width); maxY = Math.Max(maxY, m.Y + m.Height);
+        }
+        return minX == int.MaxValue ? new Rectangle(0, 0, 1920, 1080)
+            : new Rectangle(minX, minY, maxX - minX, maxY - minY);
+    }
+
     [DllImport("user32.dll")]
     private static extern int GetSystemMetrics(int nIndex);
+
+    private delegate bool MonitorEnumDelegate(IntPtr hMonitor, IntPtr hdcMonitor, IntPtr lprcMonitor, IntPtr dwData);
+    [DllImport("user32.dll")] private static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lprcClip, MonitorEnumDelegate lpfnEnum, IntPtr dwData);
+    [DllImport("user32.dll", CharSet = CharSet.Auto)] private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFOEX lpmi);
 
     private const int SM_XVIRTUALSCREEN = 76;
     private const int SM_YVIRTUALSCREEN = 77;
@@ -146,6 +246,43 @@ public class ScreenCaptureService : IScreenCaptureService, IDisposable
     }
     
     public void Dispose() { }
+}
+
+public class MonitorInfo
+{
+    public string Name { get; }
+    public int Width { get; }
+    public int Height { get; }
+    public int X { get; }
+    public int Y { get; }
+    public bool IsPrimary { get; }
+
+    public MonitorInfo(string name, int width, int height, int x, int y, bool isPrimary)
+    {
+        Name = name;
+        Width = width;
+        Height = height;
+        X = x;
+        Y = y;
+        IsPrimary = isPrimary;
+    }
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct RECT
+{
+    public int Left, Top, Right, Bottom;
+}
+
+[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+internal struct MONITORINFOEX
+{
+    public int cbSize;
+    public RECT rcMonitor;
+    public RECT rcWork;
+    public int dwFlags;
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+    public string szDevice;
 }
 
 public class CapturedScreen

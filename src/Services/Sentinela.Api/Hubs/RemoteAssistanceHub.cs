@@ -6,10 +6,17 @@ namespace Sentinela.Api.Hubs;
 public class RemoteAssistanceHub : Hub
 {
     private readonly ILogger<RemoteAssistanceHub> _logger;
+    private readonly IRepository<RemoteSession> _sessionRepo;
+    private readonly IHubContext<AgentHub> _agentHubContext;
 
-    public RemoteAssistanceHub(ILogger<RemoteAssistanceHub> logger)
+    public RemoteAssistanceHub(
+        ILogger<RemoteAssistanceHub> logger,
+        IRepository<RemoteSession> sessionRepo,
+        IHubContext<AgentHub> agentHubContext)
     {
         _logger = logger;
+        _sessionRepo = sessionRepo;
+        _agentHubContext = agentHubContext;
     }
 
     public override async Task OnConnectedAsync()
@@ -78,5 +85,34 @@ public class RemoteAssistanceHub : Hub
             EndedBy = Context.User?.Identity?.Name
         });
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"session:{sessionId}");
+    }
+
+    public async Task SwitchMonitor(string sessionId, int? monitorIndex)
+    {
+        if (!Guid.TryParse(sessionId, out var sessionGuid))
+        {
+            _logger.LogWarning("Invalid session id in SwitchMonitor: {SessionId}", sessionId);
+            return;
+        }
+
+        var session = await _sessionRepo.GetByIdAsync(sessionGuid);
+        if (session is null || session.Status != "Active")
+        {
+            _logger.LogWarning("Session {SessionId} not found or not active for SwitchMonitor", sessionId);
+            return;
+        }
+
+        session.MonitorIndex = monitorIndex;
+        await _sessionRepo.UpdateAsync(session);
+
+        await _agentHubContext.Clients.Group($"agent:{session.ComputerId}")
+            .SendAsync("SwitchRemoteSessionMonitor", new
+            {
+                SessionId = sessionId,
+                MonitorIndex = monitorIndex
+            });
+
+        _logger.LogInformation("Monitor switch requested for session {SessionId} to index {MonitorIndex}",
+            sessionId, monitorIndex);
     }
 }

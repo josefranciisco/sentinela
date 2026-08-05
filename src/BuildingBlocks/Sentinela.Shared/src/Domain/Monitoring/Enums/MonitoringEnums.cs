@@ -21,6 +21,11 @@ public enum EventType
     MalwareDetected,
     AntivirusOutdated,
     AntivirusDisabled,
+    CryptominerDetected,
+    HighCpuProcess,
+    MassFileRename,
+    RansomwarePattern,
+    SuspiciousNetworkActivity,
     Custom
 }
 

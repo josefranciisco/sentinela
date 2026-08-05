@@ -88,7 +88,10 @@ public static class ApiServiceRegistration
             });
         });
 
-        services.AddSignalR()
+        services.AddSignalR(options =>
+            {
+                options.MaximumReceiveMessageSize = 16 * 1024 * 1024;
+            })
             .AddMessagePackProtocol();
 
         services.AddMemoryCache();

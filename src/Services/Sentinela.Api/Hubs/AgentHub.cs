@@ -16,7 +16,8 @@ public class AgentHub : Hub
         "FileCopy", "USBConnected", "USBDisconnected",
         "SoftwareInstalled", "SoftwareUninstalled",
         "MalwareDetected", "AntivirusOutdated", "AntivirusDisabled",
-        "FailedLogon"
+        "FailedLogon", "CryptominerDetected", "HighCpuProcess",
+        "MassFileRename", "RansomwarePattern", "SuspiciousNetworkActivity"
     };
 
     private readonly IRepository<Computer> _computerRepo;
@@ -28,6 +29,7 @@ public class AgentHub : Hub
     private readonly IRepository<EndpointSecurityStatus> _securityStatusRepo;
     private readonly IEventBus _eventBus;
     private readonly ILogger<AgentHub> _logger;
+    private readonly IHubContext<RemoteAssistanceHub> _remoteHubContext;
 
     public AgentHub(
         IRepository<Computer> computerRepo,
@@ -38,7 +40,8 @@ public class AgentHub : Hub
         IRepository<SoftwareInventoryItem> softwareRepo,
         IRepository<EndpointSecurityStatus> securityStatusRepo,
         IEventBus eventBus,
-        ILogger<AgentHub> logger)
+        ILogger<AgentHub> logger,
+        IHubContext<RemoteAssistanceHub> remoteHubContext)
     {
         _computerRepo = computerRepo;
         _heartbeatRepo = heartbeatRepo;
@@ -49,6 +52,7 @@ public class AgentHub : Hub
         _securityStatusRepo = securityStatusRepo;
         _eventBus = eventBus;
         _logger = logger;
+        _remoteHubContext = remoteHubContext;
     }
 
     public override async Task OnConnectedAsync()
@@ -66,6 +70,7 @@ public class AgentHub : Hub
 
         computer.UpdateStatus(ComputerStatus.Online);
         computer.UpdateHeartbeat(dto.IpAddress, dto.CurrentUser);
+        computer.UpdateMonitorCount(dto.MonitorCount);
         await _computerRepo.SaveChangesAsync();
 
         var heartbeat = new Heartbeat(DateTimeOffset.UtcNow, ComputerStatus.Online, 0, 0, 0, 0) { ComputerId = computer.Id };
@@ -323,6 +328,20 @@ public class AgentHub : Hub
     {
         await Clients.Group($"agent:{computerId}")
             .SendAsync("ExecuteScript", script);
+    }
+
+    public async Task SendRemoteScreenFrame(RemoteScreenFrameDto dto)
+    {
+        if (dto is null || string.IsNullOrWhiteSpace(dto.SessionId)) return;
+
+        await _remoteHubContext.Clients.Group($"session:{dto.SessionId}")
+            .SendAsync("ScreenFrameReceived", new
+            {
+                dto.SessionId,
+                dto.FrameData,
+                dto.FrameNumber,
+                dto.Timestamp
+            });
     }
 
     private async Task<Computer> ResolveComputerAsync(Guid computerId, string hostname, string ipAddress, string currentUser)

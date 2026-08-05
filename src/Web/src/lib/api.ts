@@ -2,6 +2,16 @@ import { useAuthStore } from '@/stores/auth'
 
 const BASE_URL = '/api/v1'
 
+let isRefreshing = false
+let failedQueue: Array<{ resolve: (token: string) => void; reject: (err: unknown) => void }> = []
+
+function processQueue(error: unknown, token: string | null) {
+  failedQueue.forEach(({ resolve, reject }) => {
+    error ? reject(error) : resolve(token!)
+  })
+  failedQueue = []
+}
+
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = useAuthStore.getState().accessToken
 
@@ -12,7 +22,51 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 
   if (token) headers['Authorization'] = `Bearer ${token}`
 
-  const response = await fetch(`${BASE_URL}${endpoint}`, { ...options, headers })
+  let response = await fetch(`${BASE_URL}${endpoint}`, { ...options, headers })
+
+  if (response.status === 401 && !endpoint.includes('/auth/')) {
+    const { refreshToken, refreshAuth } = useAuthStore.getState()
+
+    if (isRefreshing) {
+      return new Promise<string>((resolve, reject) => {
+        failedQueue.push({ resolve, reject })
+      }).then((newToken) => {
+        headers['Authorization'] = `Bearer ${newToken}`
+        return fetch(`${BASE_URL}${endpoint}`, { ...options, headers }).then(r => r.json())
+      }) as Promise<T>
+    }
+
+    isRefreshing = true
+
+    try {
+      if (!refreshToken) throw new Error('No refresh token')
+
+      const refreshResponse = await fetch(`${BASE_URL}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      })
+
+      if (!refreshResponse.ok) throw new Error('Refresh failed')
+
+      const data = await refreshResponse.json()
+      localStorage.setItem('accessToken', data.accessToken)
+      localStorage.setItem('refreshToken', data.refreshToken)
+      useAuthStore.setState({ accessToken: data.accessToken, refreshToken: data.refreshToken })
+
+      processQueue(null, data.accessToken)
+
+      headers['Authorization'] = `Bearer ${data.accessToken}`
+      response = await fetch(`${BASE_URL}${endpoint}`, { ...options, headers })
+    } catch (err) {
+      processQueue(err, null)
+      useAuthStore.getState().logout()
+      window.location.href = '/login'
+      throw err
+    } finally {
+      isRefreshing = false
+    }
+  }
 
   if (response.status === 401) {
     useAuthStore.getState().logout()
