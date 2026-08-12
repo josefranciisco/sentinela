@@ -12,6 +12,8 @@ public class TimelineEntryConfiguration : IEntityTypeConfiguration<TimelineEntry
 
         builder.HasKey(t => t.Id);
 
+        builder.Property(e => e.TenantId);
+
         builder.Property(t => t.EventType)
             .IsRequired()
             .HasConversion<string>()

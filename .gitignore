@@ -12,3 +12,8 @@ Thumbs.db
 *.log
 *.tmp
 /app/public/hot
+artifacts/
+temp/
+*.dll
+*.exe
+*.pdb

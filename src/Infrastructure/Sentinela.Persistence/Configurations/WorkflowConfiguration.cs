@@ -12,6 +12,8 @@ public class WorkflowConfiguration : IEntityTypeConfiguration<Workflow>
 
         builder.HasKey(w => w.Id);
 
+        builder.Property(e => e.TenantId);
+
         builder.Property(w => w.Name)
             .IsRequired()
             .HasMaxLength(255);

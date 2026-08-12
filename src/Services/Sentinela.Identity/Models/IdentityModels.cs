@@ -4,6 +4,7 @@ namespace Sentinela.Identity.Models;
 
 public class ApplicationUser : IdentityUser<Guid>
 {
+    public Guid? TenantId { get; set; }
     public string? Department { get; set; }
     public string? FullName { get; set; }
     public bool IsActive { get; set; } = true;

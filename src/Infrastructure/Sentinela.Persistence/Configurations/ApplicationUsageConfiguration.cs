@@ -12,6 +12,8 @@ public class ApplicationUsageConfiguration : IEntityTypeConfiguration<Applicatio
 
         builder.HasKey(a => a.Id);
 
+        builder.Property(e => e.TenantId);
+
         builder.Property(a => a.ProcessName)
             .IsRequired()
             .HasMaxLength(512);

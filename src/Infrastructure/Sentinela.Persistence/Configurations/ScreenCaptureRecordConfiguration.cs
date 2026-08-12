@@ -12,6 +12,8 @@ public class ScreenCaptureRecordConfiguration : IEntityTypeConfiguration<ScreenC
 
         builder.HasKey(s => s.Id);
 
+        builder.Property(e => e.TenantId);
+
         builder.Property(s => s.FilePath)
             .IsRequired()
             .HasMaxLength(1024);

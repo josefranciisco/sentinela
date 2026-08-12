@@ -39,7 +39,28 @@ public class ComputerDetailDto : ComputerDto
     public bool? BitlockerEnabled { get; set; }
     public bool? RdpEnabled { get; set; }
     public string? AntivirusProductName { get; set; }
+    public int? AntivirusSignatureAgeDays { get; set; }
+    public DateTime? AntivirusSignatureLastUpdated { get; set; }
     public DateTime? SecurityCollectedAt { get; set; }
+}
+
+public class UpdateComputerDto
+{
+    public string? Hostname { get; set; }
+    public string? Department { get; set; }
+}
+
+public class ComputerSoftwareItemDto
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Version { get; set; } = string.Empty;
+    public string Publisher { get; set; } = string.Empty;
+    public bool IsAuthorized { get; set; }
+    public string Category { get; set; } = string.Empty;
+    public DateTimeOffset FirstDetected { get; set; }
+    public DateTimeOffset LastDetected { get; set; }
+    public string? InstallLocation { get; set; }
 }
 
 public class DiskInfoDto
@@ -530,6 +551,7 @@ public class AgentHeartbeatDto
     public string IpAddress { get; set; } = string.Empty;
     public string CurrentUser { get; set; } = string.Empty;
     public int MonitorCount { get; set; } = 1;
+    public Guid? TenantId { get; set; }
 }
 
 public class ScreenCaptureDataDto

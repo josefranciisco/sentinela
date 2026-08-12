@@ -4,6 +4,7 @@ namespace Sentinela.Api.Controllers.v1;
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/automation")]
 [Authorize(Roles = "Admin,SuperAdmin")]
+[RequirePermission("settings.manage")]
 public class AutomationController : ControllerBase
 {
     private readonly IRepository<Workflow> _workflowRepo;

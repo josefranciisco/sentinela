@@ -12,6 +12,8 @@ public class SecurityAlertConfiguration : IEntityTypeConfiguration<SecurityAlert
 
         builder.HasKey(s => s.Id);
 
+        builder.Property(e => e.TenantId);
+
         builder.Property(s => s.Title)
             .IsRequired()
             .HasMaxLength(512);

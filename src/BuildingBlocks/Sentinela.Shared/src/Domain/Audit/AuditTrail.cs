@@ -14,8 +14,7 @@ public class AuditTrail : BaseEntity
         string? resourceId = null,
         string? details = null,
         string? ipAddress = null,
-        string? userAgent = null,
-        string? tenantId = null)
+        string? userAgent = null)
         : base()
     {
         UserId = userId;
@@ -27,7 +26,6 @@ public class AuditTrail : BaseEntity
         IpAddress = ipAddress;
         UserAgent = userAgent;
         Timestamp = DateTimeOffset.UtcNow;
-        TenantId = tenantId;
     }
 
     public string UserId { get; private set; }
@@ -39,5 +37,4 @@ public class AuditTrail : BaseEntity
     public string? IpAddress { get; private set; }
     public string? UserAgent { get; private set; }
     public DateTimeOffset Timestamp { get; private set; }
-    public string? TenantId { get; private set; }
 }

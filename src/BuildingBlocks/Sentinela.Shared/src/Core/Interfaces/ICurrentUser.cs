@@ -8,5 +8,5 @@ public interface ICurrentUser
     string[] Roles { get; }
     bool IsAuthenticated { get; }
     string IpAddress { get; }
-    string TenantId { get; }
+    Guid TenantId { get; }
 }

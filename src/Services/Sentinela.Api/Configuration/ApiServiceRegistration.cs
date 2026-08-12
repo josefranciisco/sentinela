@@ -7,6 +7,8 @@ using Microsoft.OpenApi.Models;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc.Versioning;
+using Sentinela.Api.Services;
+using Sentinela.Shared.Core.Interfaces;
 
 namespace Sentinela.Api.Configuration;
 
@@ -37,7 +39,9 @@ public static class ApiServiceRegistration
                     ValidIssuer = jwtSection["Issuer"] ?? "Sentinela",
                     ValidAudience = jwtSection["Audience"] ?? "Sentinela",
                     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
-                    ClockSkew = TimeSpan.FromMinutes(2)
+                    ClockSkew = TimeSpan.FromMinutes(2),
+                    RoleClaimType = System.Security.Claims.ClaimTypes.Role,
+                    NameClaimType = System.Security.Claims.ClaimTypes.Name
                 };
 
                 options.Events = new JwtBearerEvents
@@ -112,6 +116,11 @@ public static class ApiServiceRegistration
         services.AddHttpClient();
         services.AddResponseCaching();
         services.AddResponseCompression();
+
+        services.AddHttpContextAccessor();
+        services.AddScoped<ICurrentUser, HttpCurrentUser>();
+
+        services.AddHostedService<ComputerPresenceWorker>();
 
         return services;
     }

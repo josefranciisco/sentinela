@@ -20,7 +20,7 @@ public record TwoFactorRecoveryRequest(string RecoveryCode);
 
 public record LoginResponse(string AccessToken, string RefreshToken, DateTimeOffset ExpiresAt, UserInfo User);
 
-public record UserInfo(Guid Id, string Username, string Email, string[] Roles, bool TwoFactorEnabled);
+public record UserInfo(Guid Id, string Username, string Email, string[] Roles, bool TwoFactorEnabled, Guid? TenantId = null, List<string>? Permissions = null);
 
 public record AuthErrorResponse(string Code, string Message, string? Details);
 

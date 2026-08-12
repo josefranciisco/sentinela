@@ -20,6 +20,8 @@ public static class PersistenceServiceRegistration
         services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<SentinelaDbContext>());
         services.AddScoped<IDateTime, UtcTimeProvider>();
+        services.AddScoped<TenantAccessor>();
+        services.AddScoped<ITenantAccessor>(sp => sp.GetRequiredService<TenantAccessor>());
         services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(PersistenceServiceRegistration).Assembly));
 
         return services;

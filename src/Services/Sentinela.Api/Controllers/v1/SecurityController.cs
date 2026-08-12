@@ -6,6 +6,7 @@ namespace Sentinela.Api.Controllers.v1;
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/[controller]")]
 [Authorize]
+[RequirePermission("security.view")]
 public class SecurityController : ControllerBase
 {
     private readonly IRepository<SecurityEvent> _eventRepo;
@@ -15,6 +16,7 @@ public class SecurityController : ControllerBase
     private readonly ICacheService _cache;
     private readonly IMapper _mapper;
     private readonly ILogger<SecurityController> _logger;
+    private readonly ITenantAccessor _tenantAccessor;
 
     public SecurityController(
         IRepository<SecurityEvent> eventRepo,
@@ -23,7 +25,8 @@ public class SecurityController : ControllerBase
         IRepository<Computer> computerRepo,
         ICacheService cache,
         IMapper mapper,
-        ILogger<SecurityController> logger)
+        ILogger<SecurityController> logger,
+        ITenantAccessor tenantAccessor)
     {
         _eventRepo = eventRepo;
         _ruleRepo = ruleRepo;
@@ -32,6 +35,7 @@ public class SecurityController : ControllerBase
         _cache = cache;
         _mapper = mapper;
         _logger = logger;
+        _tenantAccessor = tenantAccessor;
     }
 
     [HttpGet("events")]
@@ -45,7 +49,8 @@ public class SecurityController : ControllerBase
         [FromQuery] DateTime? from = null,
         [FromQuery] DateTime? to = null)
     {
-        var query = _eventRepo.Query().Where(e => !e.IsDeleted);
+        var tenantId = _tenantAccessor.TenantId;
+        var query = _eventRepo.Query().Where(e => !e.IsDeleted && e.TenantId == tenantId);
 
         if (!string.IsNullOrWhiteSpace(category))
             query = query.Where(e => e.Category == category);
@@ -96,8 +101,9 @@ public class SecurityController : ControllerBase
     [HttpGet("correlations")]
     public async Task<ActionResult<List<CorrelationRuleDto>>> GetCorrelationRules()
     {
+        var tenantId = _tenantAccessor.TenantId;
         var rules = await _ruleRepo.Query()
-            .Where(r => !r.IsDeleted)
+            .Where(r => !r.IsDeleted && r.TenantId == tenantId)
             .OrderByDescending(r => r.CreatedAt)
             .ToListAsync();
 
@@ -120,10 +126,11 @@ public class SecurityController : ControllerBase
     [HttpGet("summary")]
     public async Task<ActionResult<SecuritySummaryDto>> GetSecuritySummary()
     {
-        var summary = await _cache.GetOrCreateAsync("security:summary", async () =>
+        var tenantId = _tenantAccessor.TenantId;
+        var summary = await _cache.GetOrCreateAsync($"security:summary:{tenantId}", async () =>
         {
-            var events = _eventRepo.Query().Where(e => !e.IsDeleted);
-            var statuses = _statusRepo.Query().Where(s => !s.IsDeleted);
+            var events = _eventRepo.Query().Where(e => !e.IsDeleted && e.TenantId == tenantId);
+            var statuses = _statusRepo.Query().Where(s => !s.IsDeleted && s.TenantId == tenantId);
             var now = DateTimeOffset.UtcNow;
             var last24h = now.AddHours(-24);
             var last7d = now.AddDays(-7);
@@ -174,8 +181,9 @@ public class SecurityController : ControllerBase
     [HttpGet("compliance")]
     public async Task<ActionResult<List<EndpointSecurityStatusDto>>> GetEndpointCompliance()
     {
+        var tenantId = _tenantAccessor.TenantId;
         var statuses = await _statusRepo.Query()
-            .Where(s => !s.IsDeleted)
+            .Where(s => !s.IsDeleted && s.TenantId == tenantId)
             .OrderByDescending(s => s.CollectedAt)
             .ToListAsync();
 
@@ -198,10 +206,11 @@ public class SecurityController : ControllerBase
     [HttpGet("incidents")]
     public async Task<ActionResult<List<IncidentDto>>> GetIncidents([FromQuery] int limit = 5)
     {
+        var tenantId = _tenantAccessor.TenantId;
         var last24h = DateTimeOffset.UtcNow.AddHours(-24);
         
         var events = await _eventRepo.Query()
-            .Where(e => !e.IsDeleted && e.Timestamp >= last24h)
+            .Where(e => !e.IsDeleted && e.Timestamp >= last24h && e.TenantId == tenantId)
             .OrderByDescending(e => e.Timestamp)
             .ToListAsync();
 
@@ -304,11 +313,11 @@ public class SecurityController : ControllerBase
         if (eventTypes.Contains("FailedLogon"))
             return "Tentativas de Login Falharam";
         
+        if (eventTypes.Contains("FileCopy") || eventTypes.Contains("FileTransfer"))
+            return "Cópia Crítica de Arquivos para USB";
+        
         if (eventTypes.Contains("USBConnected") || eventTypes.Contains("USBDisconnected"))
             return "Atividade de Dispositivo USB";
-        
-        if (eventTypes.Contains("FileCopy"))
-            return "Cópia de Arquivos Detectada";
         
         return $"Múltiplos Eventos de Segurança ({events.Count} eventos)";
     }

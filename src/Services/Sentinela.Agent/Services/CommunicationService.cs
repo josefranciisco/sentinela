@@ -282,6 +282,7 @@ public class HeartbeatData
     public string AgentVersion { get; set; } = "";
     public bool IsAgentUpdated { get; set; }
     public int MonitorCount { get; set; } = 1;
+    public Guid? TenantId { get; set; }
 }
 
 public class TimelineEntryData

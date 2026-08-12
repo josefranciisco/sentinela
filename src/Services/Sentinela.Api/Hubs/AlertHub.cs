@@ -1,3 +1,5 @@
+using System.Security.Claims;
+
 namespace Sentinela.Api.Hubs;
 
 [Authorize]
@@ -12,17 +14,27 @@ public class AlertHub : Hub
 
     public override async Task OnConnectedAsync()
     {
-        var role = Context.User?.FindFirst(ClaimTypes.Role)?.Value;
-        if (role is not null)
+        var roles = Context.User?.FindAll(ClaimTypes.Role).Select(c => c.Value)
+            .Concat(Context.User?.FindAll("role").Select(c => c.Value) ?? Array.Empty<string>())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList() ?? new List<string>();
+
+        foreach (var role in roles)
         {
             await Groups.AddToGroupAsync(Context.ConnectionId, $"role:{role}");
-
-            if (role is "Admin" or "SuperAdmin" or "SecurityAnalyst")
-            {
-                await Groups.AddToGroupAsync(Context.ConnectionId, "security");
-            }
         }
 
+        if (roles.Any(r => r is "Admin" or "SuperAdmin" or "SecurityAnalyst" or "Operator")
+            || Context.User?.IsInRole("Admin") == true
+            || Context.User?.IsInRole("SuperAdmin") == true
+            || Context.User?.IsInRole("SecurityAnalyst") == true
+            || Context.User?.IsInRole("Operator") == true)
+        {
+            await Groups.AddToGroupAsync(Context.ConnectionId, "security");
+            await Groups.AddToGroupAsync(Context.ConnectionId, "admins");
+        }
+
+        _logger.LogInformation("Alert hub client connected: {ConnectionId}", Context.ConnectionId);
         await base.OnConnectedAsync();
     }
 
@@ -34,31 +46,5 @@ public class AlertHub : Hub
     public async Task UnsubscribeFromSeverity(string severity)
     {
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"severity:{severity}");
-    }
-
-    public async Task AlertCreated(object alert)
-    {
-        await Clients.Group("security").SendAsync("AlertCreated", alert);
-
-        var severity = alert?.GetType().GetProperty("Severity")?.GetValue(alert)?.ToString();
-        if (severity is not null)
-        {
-            await Clients.Group($"severity:{severity}").SendAsync("AlertCreated", alert);
-        }
-    }
-
-    public async Task AlertUpdated(object alert)
-    {
-        await Clients.Group("security").SendAsync("AlertUpdated", alert);
-    }
-
-    public async Task AlertAcknowledged(object alert)
-    {
-        await Clients.Group("security").SendAsync("AlertAcknowledged", alert);
-    }
-
-    public async Task AlertResolved(object alert)
-    {
-        await Clients.Group("security").SendAsync("AlertResolved", alert);
     }
 }

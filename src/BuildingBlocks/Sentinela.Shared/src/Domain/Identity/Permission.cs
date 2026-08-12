@@ -1,24 +1,21 @@
-using Sentinela.Shared.Core.ValueObjects;
+using Sentinela.Shared.Core.Entities;
 
 namespace Sentinela.Shared.Domain.Identity;
 
-public class Permission : ValueObject
+public class Permission : BaseEntity
 {
-    public Permission(string action, string resource, string? scope = null)
-    {
-        Action = action;
-        Resource = resource;
-        Scope = scope;
-    }
+    public string Code { get; private set; } = string.Empty;
+    public string Name { get; private set; } = string.Empty;
+    public string Description { get; private set; } = string.Empty;
+    public string Category { get; private set; } = string.Empty;
 
-    public string Action { get; }
-    public string Resource { get; }
-    public string? Scope { get; }
+    private Permission() { }
 
-    protected override IEnumerable<object> GetEqualityComponents()
+    public Permission(string code, string name, string description, string category)
     {
-        yield return Action;
-        yield return Resource;
-        yield return Scope ?? string.Empty;
+        Code = code;
+        Name = name;
+        Description = description;
+        Category = category;
     }
 }

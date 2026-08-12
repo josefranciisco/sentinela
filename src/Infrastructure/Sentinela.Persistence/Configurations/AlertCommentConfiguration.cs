@@ -12,6 +12,8 @@ public class AlertCommentConfiguration : IEntityTypeConfiguration<AlertComment>
 
         builder.HasKey(c => c.Id);
 
+        builder.Property(e => e.TenantId);
+
         builder.Property(c => c.Comment)
             .IsRequired()
             .HasMaxLength(4000);

@@ -57,10 +57,10 @@ public class User : AggregateRoot
         LoginAttempts = 0;
     }
 
-    public void AddRole(Guid roleId, string roleName)
+    public void AddRole(Guid roleId)
     {
         if (_roles.Any(r => r.RoleId == roleId)) return;
-        _roles.Add(new UserRole(Id, roleId, roleName));
+        _roles.Add(new UserRole(Id, roleId));
     }
 
     public void RemoveRole(Guid roleId)

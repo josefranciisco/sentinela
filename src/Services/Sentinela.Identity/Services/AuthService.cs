@@ -7,16 +7,20 @@ using Microsoft.IdentityModel.Tokens;
 using Sentinela.Identity.Configuration;
 using Sentinela.Identity.Models;
 using Sentinela.Identity.Stores;
+using Sentinela.Persistence;
 
 namespace Sentinela.Identity.Services;
 
 public class AuthService : IAuthService
 {
+    private static readonly Guid DefaultTenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly ITokenService _tokenService;
     private readonly ITwoFactorService _twoFactorService;
     private readonly IdentityDbContext _context;
+    private readonly SentinelaDbContext _sentinelaContext;
     private readonly ILogger<AuthService> _logger;
     private ILdapService? _ldapService;
     private readonly IServiceProvider _serviceProvider;
@@ -27,6 +31,7 @@ public class AuthService : IAuthService
         ITokenService tokenService,
         ITwoFactorService twoFactorService,
         IdentityDbContext context,
+        SentinelaDbContext sentinelaContext,
         ILogger<AuthService> logger,
         IServiceProvider serviceProvider)
     {
@@ -35,6 +40,7 @@ public class AuthService : IAuthService
         _tokenService = tokenService;
         _twoFactorService = twoFactorService;
         _context = context;
+        _sentinelaContext = sentinelaContext;
         _logger = logger;
         _serviceProvider = serviceProvider;
     }
@@ -112,7 +118,8 @@ public class AuthService : IAuthService
             Email = request.Email,
             Department = request.Department,
             IsActive = true,
-            CreatedAt = DateTimeOffset.UtcNow
+            CreatedAt = DateTimeOffset.UtcNow,
+            TenantId = DefaultTenantId
         };
 
         var result = await _userManager.CreateAsync(user, request.Password);
@@ -123,7 +130,7 @@ public class AuthService : IAuthService
             throw new InvalidOperationException($"Registration failed: {errors}");
         }
 
-        await _userManager.AddToRoleAsync(user, "User");
+        await _userManager.AddToRoleAsync(user, "Operator");
 
         _logger.LogInformation("User {Username} registered successfully", request.Username);
 
@@ -246,7 +253,7 @@ public class AuthService : IAuthService
         }
 
         var roles = await _userManager.GetRolesAsync(user);
-        return new UserInfo(user.Id, user.UserName ?? string.Empty, user.Email ?? string.Empty, roles.ToArray(), user.TwoFactorEnabled);
+        return new UserInfo(user.Id, user.UserName ?? string.Empty, user.Email ?? string.Empty, roles.ToArray(), user.TwoFactorEnabled, user.TenantId);
     }
 
     public async Task<TwoFactorSetupResponse> SetupTwoFactorAsync(Guid userId)
@@ -341,7 +348,8 @@ public class AuthService : IAuthService
     private async Task<LoginResponse> GenerateLoginResponseAsync(ApplicationUser user, string? deviceInfo, string? ipAddress)
     {
         var roles = await _userManager.GetRolesAsync(user);
-        var (accessToken, expiresAt) = _tokenService.GenerateAccessToken(user, roles);
+        var permissions = await GetUserPermissionsAsync(user.Id, user.TenantId);
+        var (accessToken, expiresAt) = _tokenService.GenerateAccessToken(user, roles, permissions);
         var refreshToken = _tokenService.GenerateRefreshToken();
 
         var refreshTokenEntity = new RefreshTokenEntity
@@ -368,7 +376,32 @@ public class AuthService : IAuthService
             accessToken,
             refreshToken,
             expiresAt,
-            new UserInfo(user.Id, user.UserName ?? string.Empty, user.Email ?? string.Empty, roles.ToArray(), user.TwoFactorEnabled)
+            new UserInfo(user.Id, user.UserName ?? string.Empty, user.Email ?? string.Empty, roles.ToArray(), user.TwoFactorEnabled, user.TenantId, permissions)
         );
+    }
+
+    private async Task<List<string>> GetUserPermissionsAsync(Guid userId, Guid? tenantId)
+    {
+        if (!tenantId.HasValue)
+            return new List<string>();
+
+        var userRoles = await _sentinelaContext.UserRoles
+            .Where(ur => ur.UserId == userId && ur.TenantId == tenantId.Value && !ur.IsDeleted)
+            .Select(ur => ur.RoleId)
+            .ToListAsync();
+
+        if (!userRoles.Any())
+            return new List<string>();
+
+        var permissionCodes = await _sentinelaContext.RolePermissions
+            .Where(rp => userRoles.Contains(rp.RoleId) && !rp.IsDeleted)
+            .Join(_sentinelaContext.Permissions,
+                rp => rp.PermissionId,
+                p => p.Id,
+                (rp, p) => p.Code)
+            .Distinct()
+            .ToListAsync();
+
+        return permissionCodes;
     }
 }

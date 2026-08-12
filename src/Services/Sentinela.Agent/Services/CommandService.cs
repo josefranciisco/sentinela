@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Management;
 using System.Text;
 using System.Text.Json;
+using Sentinela.Agent.Core.Collectors;
 using Sentinela.ScreenCapture.DTOs;
 using Sentinela.ScreenCapture.Services;
 
@@ -28,19 +29,25 @@ public class CommandService : ICommandService
     private readonly IScreenCaptureService _screenCaptureService;
     private readonly ICommunicationService _communicationService;
     private readonly IScreenCaptureOrchestrator _orchestrator;
+    private readonly ISoftwareCollector _softwareCollector;
+    private readonly ISecurityCollector _securityCollector;
 
     public CommandService(
         ILogger<CommandService> logger,
         IAgentStateService state,
         IScreenCaptureService screenCaptureService,
         ICommunicationService communicationService,
-        IScreenCaptureOrchestrator orchestrator)
+        IScreenCaptureOrchestrator orchestrator,
+        ISoftwareCollector softwareCollector,
+        ISecurityCollector securityCollector)
     {
         _logger = logger;
         _state = state;
         _screenCaptureService = screenCaptureService;
         _communicationService = communicationService;
         _orchestrator = orchestrator;
+        _softwareCollector = softwareCollector;
+        _securityCollector = securityCollector;
     }
 
     public async Task<CommandResult> ExecuteCommandAsync(CommandData command, CancellationToken ct = default)
@@ -60,6 +67,7 @@ public class CommandService : ICommandService
             "executescript" => await HandleExecuteScriptAsync(command.Parameters),
             "transferfile" => await HandleTransferFileAsync(command.Parameters),
             "capturescreen" => await HandleCaptureScreenAsync(command.Parameters),
+            "syncinventory" or "refreshsecurity" or "syncsecurity" => await HandleSyncInventoryAsync(ct),
             _ => new CommandResult { Success = false, Output = $"Unknown command type: {command.CommandType}" }
         };
     }
@@ -264,6 +272,63 @@ public class CommandService : ICommandService
         if (parts.Length < 2)
             return new CommandResult { Success = false, Output = "Invalid parameters. Expected: sourcePath|destinationPath" };
         return await TransferFileAsync(parts[0], parts[1]);
+    }
+
+    private async Task<CommandResult> HandleSyncInventoryAsync(CancellationToken ct)
+    {
+        try
+        {
+            _softwareCollector.CheckForChanges();
+
+            var inventory = _softwareCollector.GetInstalledSoftware()
+                .Where(s => !s.IsSystemComponent)
+                .Select(s => new SoftwareInventoryItem
+                {
+                    Name = s.DisplayName,
+                    Version = s.Version,
+                    Publisher = s.Publisher,
+                    InstallDate = s.InstallDate,
+                    InstallLocation = s.InstallLocation
+                })
+                .ToList();
+
+            await _communicationService.SendSoftwareInventoryAsync(new SoftwareInventoryData
+            {
+                ComputerId = _state.ComputerId,
+                Hostname = Environment.MachineName,
+                Items = inventory,
+                Timestamp = DateTime.UtcNow
+            }, ct);
+
+            var status = await _securityCollector.CollectSecurityStatusAsync();
+            await _communicationService.SendSecurityStatusAsync(new SecurityStatusData
+            {
+                ComputerId = _state.ComputerId,
+                FirewallEnabled = status.FirewallEnabled,
+                DefenderEnabled = status.DefenderEnabled,
+                AntivirusEnabled = status.AntivirusEnabled,
+                RealTimeProtectionEnabled = status.RealTimeProtectionEnabled,
+                AntivirusSignatureAgeDays = status.AntivirusSignatureAgeDays,
+                AntivirusSignatureLastUpdated = status.AntivirusSignatureLastUpdated,
+                AntivirusProductName = status.AntivirusProductName,
+                BitlockerEnabled = status.BitlockerEnabled,
+                RdpEnabled = status.RdpEnabled,
+                Hostname = status.Hostname,
+                Timestamp = status.Timestamp
+            }, ct);
+
+            _logger.LogInformation("Forced security/inventory sync: {Count} software items", inventory.Count);
+            return new CommandResult
+            {
+                Success = true,
+                Output = $"Synced {inventory.Count} software items and security status"
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to sync inventory/security status");
+            return new CommandResult { Success = false, Output = ex.Message };
+        }
     }
 
     private async Task<CommandResult> HandleCaptureScreenAsync(string parameters)

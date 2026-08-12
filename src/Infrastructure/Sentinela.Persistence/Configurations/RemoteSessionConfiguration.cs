@@ -12,6 +12,8 @@ public class RemoteSessionConfiguration : IEntityTypeConfiguration<RemoteSession
 
         builder.HasKey(s => s.Id);
 
+        builder.Property(e => e.TenantId);
+
         builder.Property(s => s.ComputerId)
             .IsRequired();
 

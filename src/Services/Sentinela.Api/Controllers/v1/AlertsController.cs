@@ -4,6 +4,7 @@ namespace Sentinela.Api.Controllers.v1;
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/[controller]")]
 [Authorize]
+[RequirePermission("incidents.view")]
 public class AlertsController : ControllerBase
 {
     private readonly IRepository<Alert> _alertRepo;
@@ -11,19 +12,22 @@ public class AlertsController : ControllerBase
     private readonly ICacheService _cache;
     private readonly IMapper _mapper;
     private readonly ILogger<AlertsController> _logger;
+    private readonly ITenantAccessor _tenantAccessor;
 
     public AlertsController(
         IRepository<Alert> alertRepo,
         IRepository<AlertComment> commentRepo,
         ICacheService cache,
         IMapper mapper,
-        ILogger<AlertsController> logger)
+        ILogger<AlertsController> logger,
+        ITenantAccessor tenantAccessor)
     {
         _alertRepo = alertRepo;
         _commentRepo = commentRepo;
         _cache = cache;
         _mapper = mapper;
         _logger = logger;
+        _tenantAccessor = tenantAccessor;
     }
 
     [HttpGet]
@@ -37,7 +41,8 @@ public class AlertsController : ControllerBase
         [FromQuery] DateTime? from = null,
         [FromQuery] DateTime? to = null)
     {
-        var query = _alertRepo.Query().Where(a => !a.IsDeleted);
+        var tenantId = _tenantAccessor.TenantId;
+        var query = _alertRepo.Query().Where(a => !a.IsDeleted && a.TenantId == tenantId);
 
         if (!string.IsNullOrWhiteSpace(severity) && Enum.TryParse<Severity>(severity, true, out var sev))
             query = query.Where(a => a.Severity == sev);
@@ -70,9 +75,10 @@ public class AlertsController : ControllerBase
     [HttpGet("{id}")]
     public async Task<ActionResult<AlertDetailDto>> GetAlert(Guid id)
     {
+        var tenantId = _tenantAccessor.TenantId;
         var alert = await _alertRepo.Query()
             .Include(a => a.Comments)
-            .FirstOrDefaultAsync(a => a.Id == id && !a.IsDeleted);
+            .FirstOrDefaultAsync(a => a.Id == id && !a.IsDeleted && a.TenantId == tenantId);
 
         if (alert is null) return NotFound();
         return Ok(_mapper.Map<AlertDetailDto>(alert));

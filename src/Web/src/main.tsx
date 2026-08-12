@@ -7,6 +7,10 @@ import App from './App'
 import './styles/globals.css'
 import './lib/i18n'
 
+const savedTheme = localStorage.getItem('sentinela-theme')
+if (savedTheme === 'light') document.documentElement.classList.remove('dark')
+else if (savedTheme === 'dark') document.documentElement.classList.add('dark')
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -22,7 +26,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <App />
-        <Toaster position="bottom-right" richColors />
+        <Toaster position="top-right" richColors closeButton expand visibleToasts={5} />
       </BrowserRouter>
     </QueryClientProvider>
   </React.StrictMode>,

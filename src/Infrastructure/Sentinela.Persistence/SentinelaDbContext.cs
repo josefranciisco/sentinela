@@ -1,5 +1,8 @@
+using System.Linq.Expressions;
+using System.Reflection;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Sentinela.Persistence.Configurations;
 using Sentinela.Shared.Core.Entities;
 using Sentinela.Shared.Core.Interfaces;
@@ -8,6 +11,8 @@ using Sentinela.Shared.Domain.Audit;
 using Sentinela.Shared.Domain.Automation;
 using Sentinela.Shared.Domain.Monitoring;
 using Sentinela.Shared.Domain.Security;
+using Sentinela.Shared.Domain.Tenant;
+using Sentinela.Shared.Domain.Identity;
 using Sentinela.Persistence.Models;
 
 namespace Sentinela.Persistence;
@@ -16,13 +21,20 @@ public class SentinelaDbContext : DbContext, IUnitOfWork
 {
     private readonly IMediator _mediator;
     private readonly IDateTime _dateTime;
+    private readonly ITenantAccessor _tenantAccessor;
 
-    public SentinelaDbContext(DbContextOptions<SentinelaDbContext> options, IMediator mediator, IDateTime dateTime) : base(options)
+    public SentinelaDbContext(
+        DbContextOptions<SentinelaDbContext> options,
+        IMediator mediator,
+        IDateTime dateTime,
+        ITenantAccessor tenantAccessor) : base(options)
     {
         _mediator = mediator;
         _dateTime = dateTime;
+        _tenantAccessor = tenantAccessor;
     }
 
+    public DbSet<Tenant> Tenants => Set<Tenant>();
     public DbSet<Computer> Computers => Set<Computer>();
     public DbSet<Heartbeat> Heartbeats => Set<Heartbeat>();
     public DbSet<TimelineEntry> TimelineEntries => Set<TimelineEntry>();
@@ -43,11 +55,27 @@ public class SentinelaDbContext : DbContext, IUnitOfWork
     public DbSet<RemoteSession> RemoteSessions => Set<RemoteSession>();
     public DbSet<ScreenCapture> ScreenCaptures => Set<ScreenCapture>();
     public DbSet<FileTransferRecord> FileTransfers => Set<FileTransferRecord>();
+    public DbSet<Permission> Permissions => Set<Permission>();
+    public DbSet<Role> Roles => Set<Role>();
+    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+    public DbSet<UserRole> UserRoles => Set<UserRole>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(SentinelaDbContext).Assembly);
+        
+        modelBuilder.Ignore<RefreshToken>();
+        modelBuilder.Ignore<User>();
+        
         base.OnModelCreating(modelBuilder);
+
+        ApplyTenantFilters(modelBuilder);
+    }
+
+    private void ApplyTenantFilters(ModelBuilder modelBuilder)
+    {
+        // Query filters disabled - tenant filtering is done manually in each controller
+        // using ITenantAccessor to avoid EF Core initialization issues with async services
     }
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
@@ -57,6 +85,10 @@ public class SentinelaDbContext : DbContext, IUnitOfWork
             switch (entry.State)
             {
                 case EntityState.Added:
+                    if (entry.Entity.TenantId == Guid.Empty && _tenantAccessor.TenantId != Guid.Empty)
+                    {
+                        entry.Entity.TenantId = _tenantAccessor.TenantId;
+                    }
                     break;
                 case EntityState.Modified:
                     entry.Entity.MarkAsUpdated();

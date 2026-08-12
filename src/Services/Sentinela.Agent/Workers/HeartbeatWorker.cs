@@ -42,7 +42,8 @@ public class HeartbeatWorker : BackgroundService
                     Uptime = (int)(DateTime.UtcNow - _state.StartTime).TotalSeconds,
                     AgentVersion = GetType().Assembly.GetName().Version?.ToString() ?? "1.0.0",
                     IsAgentUpdated = true,
-                    MonitorCount = _screenCaptureService.GetMonitors().Count
+                    MonitorCount = _screenCaptureService.GetMonitors().Count,
+                    TenantId = _options.TenantId
                 };
                 
                 await _communication.SendHeartbeatAsync(heartbeat, stoppingToken);

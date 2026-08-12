@@ -12,6 +12,8 @@ public class AuditTrailConfiguration : IEntityTypeConfiguration<AuditTrail>
 
         builder.HasKey(a => a.Id);
 
+        builder.Property(e => e.TenantId);
+
         builder.Property(a => a.UserId)
             .IsRequired()
             .HasMaxLength(255);
@@ -39,9 +41,6 @@ public class AuditTrailConfiguration : IEntityTypeConfiguration<AuditTrail>
 
         builder.Property(a => a.UserAgent)
             .HasMaxLength(512);
-
-        builder.Property(a => a.TenantId)
-            .HasMaxLength(255);
 
         builder.HasIndex(a => new { a.UserId, a.Timestamp, a.Action })
             .HasDatabaseName("ix_audit_trails_user_id_timestamp_action");

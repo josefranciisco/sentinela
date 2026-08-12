@@ -13,6 +13,8 @@ public class SecurityEventConfiguration : IEntityTypeConfiguration<SecurityEvent
 
         builder.HasKey(s => s.Id);
 
+        builder.Property(e => e.TenantId);
+
         builder.Property(s => s.EventType)
             .IsRequired()
             .HasMaxLength(255);

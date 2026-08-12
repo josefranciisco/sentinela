@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
@@ -11,8 +11,9 @@ import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@
 import { Dialog, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { api } from '@/lib/api'
 import { useComputer, useComputerTimeline } from '@/hooks/useComputers'
+import { useLiveRelativeTime } from '@/hooks/useLiveRelativeTime'
 import { formatDate, formatRelative, formatDuration } from '@/lib/utils'
-import { ArrowLeft, Monitor, Clock, Shield, Camera, Radio, Download, Search, Eye, Trash2, Loader2, Maximize2, X, AlertTriangle, User } from 'lucide-react'
+import { ArrowLeft, Monitor, Clock, Shield, Camera, Radio, Download, Search, Eye, Trash2, Loader2, Maximize2, X, AlertTriangle, User, Package, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth'
 
@@ -367,12 +368,236 @@ function ScreenshotsTab({ computerId }: { computerId: string }) {
   )
 }
 
+function SecurityTab({ computerId, computer }: { computerId: string; computer: any }) {
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const [softwareSearch, setSoftwareSearch] = useState('')
+
+  const { data: eventsPage, isLoading: eventsLoading } = useQuery({
+    queryKey: ['computer-security-events', computerId],
+    queryFn: () => api.get<{ items: any[] }>(`/security/events?computerId=${computerId}&pageSize=30`),
+    refetchInterval: 15000,
+  })
+
+  const { data: software, isLoading: softwareLoading } = useQuery({
+    queryKey: ['computer-software', computerId, softwareSearch],
+    queryFn: () => {
+      const q = softwareSearch.trim() ? `?search=${encodeURIComponent(softwareSearch.trim())}` : ''
+      return api.get<any[]>(`/computers/${computerId}/software${q}`)
+    },
+    refetchInterval: 60000,
+  })
+
+  const syncMutation = useMutation({
+    mutationFn: () => api.post(`/computers/${computerId}/sync-security`),
+    onSuccess: () => {
+      toast.success(t('computerDetail.syncRequested', 'Sincronização solicitada ao Agent'))
+      window.setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['computer-software', computerId] })
+        queryClient.invalidateQueries({ queryKey: ['computer-security-events', computerId] })
+        queryClient.invalidateQueries({ queryKey: ['computer', computerId] })
+      }, 4000)
+    },
+    onError: () => toast.error(t('computerDetail.syncFailed', 'Falha ao solicitar sincronização')),
+  })
+
+  const signatureAge = computer.antivirusSignatureAgeDays
+  const avOutdated = typeof signatureAge === 'number' && signatureAge > 7
+
+  const complianceItems = [
+    { label: t('computerDetail.firewall'), ok: computer.firewallEnabled },
+    { label: computer.antivirusProductName || t('computerDetail.antivirus'), ok: computer.antivirusEnabled },
+    { label: t('computerDetail.realTimeProtection', 'Proteção em tempo real'), ok: computer.realTimeProtectionEnabled },
+    { label: t('computerDetail.bitLocker'), ok: computer.bitlockerEnabled },
+    { label: t('computerDetail.rdp'), ok: computer.rdpEnabled },
+  ]
+
+  const events = eventsPage?.items || []
+  const softwareItems = software || []
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Shield className="h-4 w-4" />
+              {t('computerDetail.securityStatus', 'Status de segurança')}
+            </CardTitle>
+            <div className="flex items-center gap-3">
+              {computer.securityCollectedAt && (
+                <span className="text-xs text-muted-foreground">
+                  {t('computerDetail.lastCollected', 'Coletado')}: {formatRelative(computer.securityCollectedAt)}
+                </span>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={syncMutation.isPending || computer.status !== 'Online'}
+                onClick={() => syncMutation.mutate()}
+                title={
+                  computer.status !== 'Online'
+                    ? t('computerDetail.syncOffline', 'Máquina offline — sync indisponível')
+                    : t('computerDetail.syncHint', 'Forçar inventário e status de segurança')
+                }
+              >
+                {syncMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-1" />
+                )}
+                {t('computerDetail.syncNow', 'Sincronizar')}
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {complianceItems.map((item) =>
+              item.ok === undefined || item.ok === null ? null : (
+                <div key={item.label} className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2.5">
+                  <span className="text-sm text-muted-foreground">{item.label}</span>
+                  <Badge variant={item.ok ? 'success' : 'destructive'} className="text-[10px]">
+                    {item.ok ? t('computerDetail.active') : t('computerDetail.inactive')}
+                  </Badge>
+                </div>
+              )
+            )}
+            {typeof signatureAge === 'number' && (
+              <div className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2.5">
+                <span className="text-sm text-muted-foreground">
+                  {t('computerDetail.avSignatures', 'Assinaturas AV')}
+                </span>
+                <Badge variant={avOutdated ? 'destructive' : 'success'} className="text-[10px]">
+                  {avOutdated
+                    ? t('computerDetail.outdatedDays', '{{days}} dias', { days: signatureAge })
+                    : t('computerDetail.upToDateDays', '{{days}} dias', { days: signatureAge })}
+                </Badge>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4" />
+            {t('computerDetail.securityEvents')}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {eventsLoading ? (
+            <p className="text-sm text-muted-foreground">{t('common.loading', 'Carregando...')}</p>
+          ) : events.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {t('computerDetail.noSecurityEvents', 'Nenhum evento de segurança registrado nesta máquina.')}
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {events.map((event: any) => (
+                <div key={event.id} className="flex items-start gap-3 text-sm py-2 border-b border-border/50 last:border-0">
+                  <Badge
+                    variant={
+                      String(event.severity).toLowerCase() === 'critical' || String(event.severity).toLowerCase() === 'high'
+                        ? 'destructive'
+                        : 'warning'
+                    }
+                    className="text-[10px] shrink-0 mt-0.5"
+                  >
+                    {event.severity}
+                  </Badge>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium">
+                      {t(`computerDetail.eventType.${event.eventType}`, { defaultValue: event.eventType })}
+                    </p>
+                    <p className="text-muted-foreground">{event.description}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {formatDate(event.timestamp)}
+                      {event.username ? ` · ${event.username}` : ''}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Package className="h-4 w-4" />
+              {t('computerDetail.installedSoftware', 'Softwares instalados')}
+              {!softwareLoading && (
+                <Badge variant="secondary" className="text-[10px]">{softwareItems.length}</Badge>
+              )}
+            </CardTitle>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                placeholder={t('computerDetail.searchSoftware', 'Buscar software...')}
+                value={softwareSearch}
+                onChange={(e) => setSoftwareSearch(e.target.value)}
+                className="h-9 w-64 rounded-lg border border-input bg-background pl-8 pr-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {softwareLoading ? (
+            <p className="text-sm text-muted-foreground">{t('common.loading', 'Carregando...')}</p>
+          ) : softwareItems.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {t(
+                'computerDetail.noSoftware',
+                'Nenhum software inventariado ainda. O Agent sincroniza o inventário periodicamente enquanto estiver online.'
+              )}
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t('computerDetail.softwareName', 'Nome')}</TableHead>
+                  <TableHead>{t('computerDetail.softwareVersion', 'Versão')}</TableHead>
+                  <TableHead>{t('computerDetail.softwarePublisher', 'Fabricante')}</TableHead>
+                  <TableHead>{t('computerDetail.softwareLastSeen', 'Última detecção')}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {softwareItems.map((item: any) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="font-medium">{item.name}</TableCell>
+                    <TableCell className="text-muted-foreground">{item.version || '-'}</TableCell>
+                    <TableCell className="text-muted-foreground">{item.publisher || '-'}</TableCell>
+                    <TableCell className="text-muted-foreground text-xs">
+                      {item.lastDetected ? formatRelative(item.lastDetected) : '-'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
 export function ComputerDetail() {
   const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const initialTab = ['timeline', 'fileTransfers', 'screenshots', 'remote', 'security'].includes(
+    searchParams.get('tab') || ''
+  )
+    ? (searchParams.get('tab') as string)
+    : 'timeline'
   const { data: computer, isLoading } = useComputer(id!)
   const { data: timeline } = useComputerTimeline(id!)
+  const lastHeartbeatLabel = useLiveRelativeTime(computer?.lastHeartbeat)
 
   if (isLoading) return <div className="flex items-center justify-center h-64 text-muted-foreground">{t('computerDetail.loading')}</div>
   if (!computer) return <div className="flex items-center justify-center h-64 text-muted-foreground">{t('computerDetail.computerNotFound')}</div>
@@ -398,7 +623,7 @@ export function ComputerDetail() {
         </div>
       </div>
 
-      <Tabs defaultValue="timeline">
+      <Tabs defaultValue={initialTab} key={initialTab}>
         <TabsList>
           <TabsTrigger value="timeline"><Clock className="h-4 w-4 mr-1" /> {t('computerDetail.timeline')}</TabsTrigger>
           <TabsTrigger value="fileTransfers"><Download className="h-4 w-4 mr-1" /> {t('computerDetail.fileTransfers', 'Transferências')}</TabsTrigger>
@@ -412,7 +637,7 @@ export function ComputerDetail() {
             <CardContent className="p-4">
               <div className="flex flex-wrap items-center gap-x-8 gap-y-2 text-sm">
                 <span className="text-muted-foreground">{t('computerDetail.currentUser')}: <strong className="text-foreground">{computer.currentUser || '-'}</strong></span>
-                <span className="text-muted-foreground">{t('computerDetail.lastHeartbeat')}: <strong className="text-foreground">{formatRelative(computer.lastHeartbeat)}</strong></span>
+                <span className="text-muted-foreground">{t('computerDetail.lastHeartbeat')}: <strong className="text-foreground">{lastHeartbeatLabel}</strong></span>
                 <span className="text-muted-foreground shrink-0">|</span>
                 {[
                   { label: t('computerDetail.firewall'), ok: computer.firewallEnabled },
@@ -491,12 +716,7 @@ export function ComputerDetail() {
         </TabsContent>
 
         <TabsContent value="security">
-          <Card>
-            <CardHeader><CardTitle className="text-base">{t('computerDetail.securityEvents')}</CardTitle></CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">{t('computerDetail.securityMonitoringPlaceholder')}</p>
-            </CardContent>
-          </Card>
+          <SecurityTab computerId={id!} computer={computer} />
         </TabsContent>
       </Tabs>
     </div>

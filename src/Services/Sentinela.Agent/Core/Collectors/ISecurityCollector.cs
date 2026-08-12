@@ -27,7 +27,11 @@ public class SecurityCollector : ISecurityCollector
             RealTimeProtectionEnabled = defender.RealTimeProtectionEnabled || thirdParty.Any(p => p.IsEnabled),
             AntivirusSignatureAgeDays = thirdParty.Any(p => p.IsEnabled && p.IsUpToDate) ? 0 : defender.AntivirusSignatureAgeDays,
             AntivirusSignatureLastUpdated = thirdParty.Any(p => p.IsEnabled && p.IsUpToDate) ? DateTime.UtcNow : defender.AntivirusSignatureLastUpdated,
-            AntivirusProductName = SimplifyProductName(thirdParty.FirstOrDefault(p => p.IsEnabled)?.DisplayName) ?? defender.ProductName ?? "Unknown",
+            AntivirusProductName = SimplifyProductName(
+                    thirdParty.FirstOrDefault(p => p.IsEnabled)?.DisplayName
+                    ?? thirdParty.FirstOrDefault()?.DisplayName)
+                ?? defender.ProductName
+                ?? "",
             ThirdPartyProducts = thirdParty,
             BitlockerEnabled = await CheckBitlockerAsync(),
             RdpEnabled = CheckRdp(),
@@ -248,13 +252,17 @@ public class SecurityCollector : ISecurityCollector
     {
         try
         {
-            var policyType = Type.GetTypeFromProgID("HNetCfg.FwPolicy2");
-            if (policyType == null) return false;
+            using var key = Registry.LocalMachine.OpenSubKey(
+                @"SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy");
+            if (key == null) return false;
 
-            var policy = Activator.CreateInstance(policyType);
-            var currentProfileTypes = policyType.GetProperty("CurrentProfileTypes")!.GetValue(policy);
-            var firewallEnabled = policyType.GetProperty("FirewallEnabled")!.GetValue(policy, new[] { currentProfileTypes });
-            return firewallEnabled is bool enabled && enabled;
+            foreach (var profile in new[] { "DomainProfile", "PrivateProfile", "StandardProfile" })
+            {
+                using var profileKey = key.OpenSubKey(profile);
+                if (profileKey?.GetValue("EnableFirewall") is int enabled && enabled == 1)
+                    return true;
+            }
+            return false;
         }
         catch { return false; }
     }

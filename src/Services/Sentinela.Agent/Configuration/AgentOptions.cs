@@ -2,6 +2,7 @@ namespace Sentinela.Agent.Configuration;
 
 public class AgentOptions
 {
+    public Guid? TenantId { get; set; }
     public int HeartbeatIntervalMs { get; set; } = 10000;
     public int CollectorIntervalMs { get; set; } = 1000;
     public int BatchSendIntervalMs { get; set; } = 5000;

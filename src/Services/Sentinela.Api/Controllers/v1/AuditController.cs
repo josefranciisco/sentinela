@@ -4,6 +4,7 @@ namespace Sentinela.Api.Controllers.v1;
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/[controller]")]
 [Authorize(Roles = "Admin,SuperAdmin,Auditor")]
+[RequirePermission("audit.view")]
 public class AuditController : ControllerBase
 {
     private readonly IRepository<AuditTrail> _auditRepo;

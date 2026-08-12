@@ -19,6 +19,7 @@ public abstract class BaseEntity : IEquatable<BaseEntity>
     }
 
     public Guid Id { get; protected set; }
+    public Guid TenantId { get; set; } = Guid.Empty;
     public DateTimeOffset CreatedAt { get; internal set; }
     public DateTimeOffset? UpdatedAt { get; internal set; }
     public DateTimeOffset? DeletedAt { get; internal set; }

@@ -6,6 +6,7 @@ namespace Sentinela.Api.Controllers.v1;
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/[controller]")]
 [Authorize]
+[RequirePermission("machines.view")]
 public class SoftwareController : ControllerBase
 {
     private readonly IRepository<SoftwareInventoryItem> _softwareRepo;

@@ -1,4 +1,4 @@
-
+using System.Security.Claims;
 
 namespace Sentinela.Api.Hubs;
 
@@ -19,22 +19,22 @@ public class MonitoringHub : Hub
         {
             await Groups.AddToGroupAsync(Context.ConnectionId, $"computer:{computerId}");
         }
-        
-        var role = Context.User?.FindFirst(ClaimTypes.Role)?.Value;
-        if (role is "Admin" or "SuperAdmin" or "Operator")
+
+        if (IsOperator(Context.User))
         {
             await Groups.AddToGroupAsync(Context.ConnectionId, "admins");
+            await Groups.AddToGroupAsync(Context.ConnectionId, "security");
         }
 
-        _logger.LogInformation("Client connected: {ConnectionId}, User: {User}", 
+        _logger.LogInformation("Monitoring client connected: {ConnectionId}, User: {User}",
             Context.ConnectionId, Context.User?.Identity?.Name);
-        
+
         await base.OnConnectedAsync();
     }
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        _logger.LogInformation("Client disconnected: {ConnectionId}", Context.ConnectionId);
+        _logger.LogInformation("Monitoring client disconnected: {ConnectionId}", Context.ConnectionId);
         await base.OnDisconnectedAsync(exception);
     }
 
@@ -46,5 +46,18 @@ public class MonitoringHub : Hub
     public async Task UnsubscribeFromComputer(string computerId)
     {
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"computer:{computerId}");
+    }
+
+    private static bool IsOperator(ClaimsPrincipal? user)
+    {
+        if (user is null) return false;
+        if (user.IsInRole("Admin") || user.IsInRole("SuperAdmin")
+            || user.IsInRole("Operator") || user.IsInRole("SecurityAnalyst"))
+            return true;
+
+        // Fallback: some tokens put role in a custom claim
+        var roles = user.FindAll(ClaimTypes.Role).Select(c => c.Value)
+            .Concat(user.FindAll("role").Select(c => c.Value));
+        return roles.Any(r => r is "Admin" or "SuperAdmin" or "Operator" or "SecurityAnalyst");
     }
 }

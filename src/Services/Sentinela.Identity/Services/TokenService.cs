@@ -24,7 +24,7 @@ public class TokenService : ITokenService
         _logger = logger;
     }
 
-    public (string accessToken, DateTimeOffset expiresAt) GenerateAccessToken(ApplicationUser user, IList<string> roles)
+    public (string accessToken, DateTimeOffset expiresAt) GenerateAccessToken(ApplicationUser user, IList<string> roles, IList<string>? permissions = null)
     {
         var expiresAt = DateTimeOffset.UtcNow.AddMinutes(_jwtConfig.AccessTokenExpirationMinutes);
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtConfig.Secret));
@@ -40,6 +40,16 @@ public class TokenService : ITokenService
         };
 
         claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
+
+        if (permissions?.Any() == true)
+        {
+            claims.AddRange(permissions.Select(p => new Claim("permission", p)));
+        }
+
+        if (user.TenantId.HasValue)
+        {
+            claims.Add(new Claim("tenant_id", user.TenantId.Value.ToString()));
+        }
 
         var token = new JwtSecurityToken(
             issuer: _jwtConfig.Issuer,

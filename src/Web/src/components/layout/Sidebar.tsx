@@ -2,18 +2,20 @@ import { NavLink } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth'
 import { useTranslation } from 'react-i18next'
+import { usePermissions } from '@/hooks/usePermissions'
 import { Avatar } from '@/components/ui/avatar'
 import {
-  LayoutDashboard, Monitor, Settings, Users,
+  Shield, Monitor, Settings, Users,
   ChevronLeft, LogOut, Radio,
 } from 'lucide-react'
 
 const navItems = [
-  { icon: LayoutDashboard, labelKey: 'nav.dashboard', path: '/' },
-  { icon: Monitor, labelKey: 'nav.computers', path: '/computers' },
-  { icon: Users, labelKey: 'nav.users', path: '/users' },
-  { icon: Radio, labelKey: 'nav.remoteAssist', path: '/remote-assistance' },
-  { icon: Settings, labelKey: 'nav.settings', path: '/settings' },
+  { icon: Shield, labelKey: 'nav.dashboard', path: '/', permission: '' },
+  { icon: Monitor, labelKey: 'nav.computers', path: '/computers', permission: 'machines.view' },
+  { icon: Users, labelKey: 'nav.users', path: '/users', permission: 'users.view' },
+  { icon: Shield, labelKey: 'nav.roles', path: '/roles', permission: 'roles.view' },
+  { icon: Radio, labelKey: 'nav.remoteAssist', path: '/remote-assistance', permission: 'remote.view' },
+  { icon: Settings, labelKey: 'nav.settings', path: '/settings', permission: '' },
 ]
 
 interface SidebarProps {
@@ -24,11 +26,14 @@ interface SidebarProps {
 export function Sidebar({ open, onToggle }: SidebarProps) {
   const { t } = useTranslation()
   const { user, logout } = useAuthStore()
+  const { hasPermission } = usePermissions()
+
+  const visibleItems = navItems.filter(item => !item.permission || hasPermission(item.permission))
 
   return (
     <aside
       className={cn(
-        'flex flex-col border-r border-border/50 bg-card/50 backdrop-blur-xl transition-all duration-300 z-30',
+        'flex flex-col border-r border-border/50 bg-card/40 backdrop-blur-xl transition-all duration-300 z-30',
         open ? 'w-64' : 'w-16',
       )}
     >
@@ -50,7 +55,7 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
       </div>
 
       <nav className="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
-        {navItems.map((item) => (
+        {visibleItems.map((item) => (
           <NavLink
             key={item.path}
             to={item.path}

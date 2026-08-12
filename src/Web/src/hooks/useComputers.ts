@@ -7,6 +7,7 @@ export function useComputers(params?: Record<string, string>) {
   return useQuery<PaginatedResult<Computer>>({
     queryKey: ['computers', params],
     queryFn: () => api.get(`/computers${query}`),
+    refetchInterval: 10_000,
   })
 }
 
@@ -15,6 +16,7 @@ export function useComputer(id: string) {
     queryKey: ['computer', id],
     queryFn: () => api.get(`/computers/${id}`),
     enabled: !!id,
+    refetchInterval: 10_000,
   })
 }
 

@@ -13,16 +13,17 @@ function processQueue(error: unknown, token: string | null) {
 }
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const token = useAuthStore.getState().accessToken
+  const { accessToken, user } = useAuthStore.getState()
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
   }
 
-  if (token) headers['Authorization'] = `Bearer ${token}`
+  if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`
+  if (user?.tenantId) headers['X-Tenant-Id'] = user.tenantId
 
-  let response = await fetch(`${BASE_URL}${endpoint}`, { ...options, headers })
+  let response = await fetch(`${BASE_URL}${endpoint}`, { ...options, headers, cache: 'no-store' })
 
   if (response.status === 401 && !endpoint.includes('/auth/')) {
     const { refreshToken, refreshAuth } = useAuthStore.getState()

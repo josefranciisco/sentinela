@@ -8,6 +8,9 @@ using Microsoft.OpenApi.Models;
 using Sentinela.Identity.Models;
 using Sentinela.Identity.Services;
 using Sentinela.Identity.Stores;
+using Sentinela.Persistence;
+using Sentinela.Shared.Core.Interfaces;
+using Sentinela.Shared.Infrastructure.Time;
 
 namespace Sentinela.Identity.Configuration;
 
@@ -27,6 +30,14 @@ public static class ServiceCollectionExtensions
 
         services.AddDbContext<IdentityDbContext>(options =>
             options.UseNpgsql(configuration.GetConnectionString("IdentityConnection")));
+
+        services.AddDbContext<SentinelaDbContext>(options =>
+            options.UseNpgsql(configuration.GetConnectionString("SentinelaDb"))
+                .UseSnakeCaseNamingConvention());
+
+        services.AddScoped<ITenantAccessor, TenantAccessor>();
+        services.AddScoped<IDateTime, UtcTimeProvider>();
+        services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(SentinelaDbContext).Assembly));
 
         services.AddIdentity<ApplicationUser, ApplicationRole>(options =>
         {

@@ -7,6 +7,8 @@ interface User {
   email: string
   roles: string[]
   twoFactorEnabled: boolean
+  tenantId?: string
+  permissions?: string[]
 }
 
 interface AuthState {

@@ -12,6 +12,8 @@ public class ComputerConfiguration : IEntityTypeConfiguration<Computer>
 
         builder.HasKey(c => c.Id);
 
+        builder.Property(c => c.TenantId);
+
         builder.Property(c => c.Hostname)
             .IsRequired()
             .HasMaxLength(255);

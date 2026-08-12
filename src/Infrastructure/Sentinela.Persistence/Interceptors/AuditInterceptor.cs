@@ -41,8 +41,12 @@ public class AuditInterceptor : SaveChangesInterceptor
                 resource: entry.Entity.GetType().Name,
                 resourceId: idProperty?.CurrentValue?.ToString(),
                 details: SerializeChanges(entry),
-                ipAddress: _currentUser.IpAddress,
-                tenantId: _currentUser.TenantId);
+                ipAddress: _currentUser.IpAddress);
+
+            if (_currentUser.TenantId != Guid.Empty)
+            {
+                auditEntry.TenantId = _currentUser.TenantId;
+            }
 
             auditEntries.Add(auditEntry);
         }

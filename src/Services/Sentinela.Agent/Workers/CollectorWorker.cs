@@ -30,6 +30,7 @@ public class CollectorWorker : BackgroundService
     private readonly AgentOptions _options;
     private readonly ILogger<CollectorWorker> _logger;
     private readonly ConcurrentQueue<TimelineEntryData> _eventQueue = new();
+    private readonly SemaphoreSlim _flushLock = new(1, 1);
 
     private string _lastWindowTitle = "";
     private int _lastProcessId;
@@ -143,12 +144,13 @@ public class CollectorWorker : BackgroundService
                 {
                     EventType = "USBConnected",
                     Category = "USB",
-                    Description = $"USB device connected: {e.DeviceInfo.DriveLetter}",
+                    Description = $"Pendrive conectado: {e.DeviceInfo.DriveLetter}",
                     Details = $"{e.DeviceInfo.VolumeName} ({e.DeviceInfo.TotalSize / 1024 / 1024}MB)",
                     Timestamp = DateTime.UtcNow,
-                    Severity = "Info",
+                    Severity = "High",
                     ComputerId = _state.ComputerId
                 });
+                _ = FlushEventQueueAsync(CancellationToken.None);
             };
 
             _usbCollector.DeviceRemoved += (s, e) =>
@@ -157,12 +159,13 @@ public class CollectorWorker : BackgroundService
                 {
                     EventType = "USBDisconnected",
                     Category = "USB",
-                    Description = "USB device disconnected",
+                    Description = $"Pendrive desconectado: {e.DeviceInfo.DriveLetter}",
                     Details = e.DeviceInfo.DriveLetter,
                     Timestamp = DateTime.UtcNow,
-                    Severity = "Info",
+                    Severity = "Medium",
                     ComputerId = _state.ComputerId
                 });
+                _ = FlushEventQueueAsync(CancellationToken.None);
             };
 
             _usbCollector.FileCopied += (s, e) =>
@@ -171,13 +174,14 @@ public class CollectorWorker : BackgroundService
                 {
                     EventType = "FileCopy",
                     Category = "USB",
-                    Description = $"File copied: {e.FileName}",
+                    Description = $"Arquivo copiado para USB: {e.FileName}",
                     Details = $"Drive: {e.DriveLetter}, Size: {e.FileSize / 1024}KB, Path: {e.FullPath}",
                     Username = Environment.UserName,
                     Timestamp = DateTime.UtcNow,
-                    Severity = "Medium",
+                    Severity = "Critical",
                     ComputerId = _state.ComputerId
                 });
+                _ = FlushEventQueueAsync(CancellationToken.None);
             };
         }
 
@@ -248,6 +252,8 @@ public class CollectorWorker : BackgroundService
             try
             {
                 await CollectSecurityEventsAsync();
+                if (_options.EnableUsbTracking)
+                    _usbCollector.PollRemovableDrives();
                 await PollSoftwareAsync(ct);
                 await PollSecurityStatusAsync(ct);
                 await PollMalwareAsync();
@@ -497,16 +503,33 @@ public class CollectorWorker : BackgroundService
 
     private async Task FlushEventQueueAsync(CancellationToken ct)
     {
-        var batch = new List<TimelineEntryData>();
-        while (_eventQueue.TryDequeue(out var entry))
-        {
-            if (string.IsNullOrEmpty(entry.ComputerId))
-                entry.ComputerId = _state.ComputerId;
-            batch.Add(entry);
-            if (batch.Count >= 50) break;
-        }
+        if (!await _flushLock.WaitAsync(0, ct))
+            return;
 
-        if (batch.Count > 0)
-            await _communication.SendTimelineBatchAsync(batch, ct);
+        try
+        {
+            var batch = new List<TimelineEntryData>();
+            while (_eventQueue.TryDequeue(out var entry))
+            {
+                if (string.IsNullOrEmpty(entry.ComputerId))
+                    entry.ComputerId = _state.ComputerId;
+                batch.Add(entry);
+                if (batch.Count >= 50) break;
+            }
+
+            if (batch.Count > 0)
+            {
+                _logger.LogInformation("Flushing {Count} timeline events (USB/security)", batch.Count);
+                await _communication.SendTimelineBatchAsync(batch, ct);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to flush event queue");
+        }
+        finally
+        {
+            _flushLock.Release();
+        }
     }
 }

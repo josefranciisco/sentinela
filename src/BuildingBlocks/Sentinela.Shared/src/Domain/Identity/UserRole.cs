@@ -1,23 +1,19 @@
-using Sentinela.Shared.Core.ValueObjects;
+using Sentinela.Shared.Core.Entities;
 
 namespace Sentinela.Shared.Domain.Identity;
 
-public class UserRole : ValueObject
+public class UserRole : BaseEntity
 {
-    public UserRole(Guid userId, Guid roleId, string roleName)
+    public Guid UserId { get; private set; }
+    public Guid RoleId { get; private set; }
+    public User? User { get; private set; }
+    public Role? Role { get; private set; }
+
+    private UserRole() { }
+
+    public UserRole(Guid userId, Guid roleId)
     {
         UserId = userId;
         RoleId = roleId;
-        RoleName = roleName;
-    }
-
-    public Guid UserId { get; }
-    public Guid RoleId { get; }
-    public string RoleName { get; }
-
-    protected override IEnumerable<object> GetEqualityComponents()
-    {
-        yield return UserId;
-        yield return RoleId;
     }
 }

@@ -12,6 +12,8 @@ public class AlertRuleConfiguration : IEntityTypeConfiguration<AlertRule>
 
         builder.HasKey(r => r.Id);
 
+        builder.Property(e => e.TenantId);
+
         builder.Property(r => r.Name)
             .IsRequired()
             .HasMaxLength(255);

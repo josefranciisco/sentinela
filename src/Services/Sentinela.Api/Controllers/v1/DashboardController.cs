@@ -4,6 +4,7 @@ namespace Sentinela.Api.Controllers.v1;
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/[controller]")]
 [Authorize]
+[RequirePermission("dashboard.view")]
 public class DashboardController : ControllerBase
 {
     private readonly IRepository<Computer> _computerRepo;
@@ -14,6 +15,7 @@ public class DashboardController : ControllerBase
     private readonly ICacheService _cache;
     private readonly IMapper _mapper;
     private readonly ILogger<DashboardController> _logger;
+    private readonly ITenantAccessor _tenantAccessor;
 
     public DashboardController(
         IRepository<Computer> computerRepo,
@@ -23,7 +25,8 @@ public class DashboardController : ControllerBase
         IRepository<Heartbeat> heartbeatRepo,
         ICacheService cache,
         IMapper mapper,
-        ILogger<DashboardController> logger)
+        ILogger<DashboardController> logger,
+        ITenantAccessor tenantAccessor)
     {
         _computerRepo = computerRepo;
         _timelineRepo = timelineRepo;
@@ -33,16 +36,18 @@ public class DashboardController : ControllerBase
         _cache = cache;
         _mapper = mapper;
         _logger = logger;
+        _tenantAccessor = tenantAccessor;
     }
 
     [HttpGet("overview")]
     [HttpGet("stats")]
     public async Task<ActionResult<DashboardStatsDto>> GetOverview()
     {
-        var stats = await _cache.GetOrCreateAsync("dashboard:overview", async () =>
+        var tenantId = _tenantAccessor.TenantId;
+        var stats = await _cache.GetOrCreateAsync($"dashboard:overview:{tenantId}", async () =>
         {
-            var computers = _computerRepo.Query().Where(c => !c.IsDeleted);
-            var alerts = _alertRepo.Query().Where(a => !a.IsDeleted);
+            var computers = _computerRepo.Query().Where(c => !c.IsDeleted && c.TenantId == tenantId);
+            var alerts = _alertRepo.Query().Where(a => !a.IsDeleted && a.TenantId == tenantId);
 
             return new DashboardStatsDto
             {
@@ -63,9 +68,10 @@ public class DashboardController : ControllerBase
     [HttpGet("heatmap")]
     public async Task<ActionResult<List<HeatmapDto>>> GetHeatmap([FromQuery] int days = 7)
     {
+        var tenantId = _tenantAccessor.TenantId;
         var from = DateTime.UtcNow.AddDays(-days);
         var data = await _timelineRepo.Query()
-            .Where(t => t.Timestamp >= from && !t.IsDeleted)
+            .Where(t => t.Timestamp >= from && !t.IsDeleted && t.TenantId == tenantId)
             .GroupBy(t => t.Timestamp.Hour)
             .Select(g => new HeatmapDto
             {
@@ -82,9 +88,10 @@ public class DashboardController : ControllerBase
     [HttpGet("top-applications")]
     public async Task<ActionResult<List<ApplicationUsageDto>>> GetTopApplications([FromQuery] int top = 10, [FromQuery] int days = 7)
     {
+        var tenantId = _tenantAccessor.TenantId;
         var from = DateTime.UtcNow.AddDays(-days);
         var rawApps = await _appUsageRepo.Query()
-            .Where(a => a.StartTime >= from)
+            .Where(a => a.StartTime >= from && a.TenantId == tenantId)
             .ToListAsync();
 
         var apps = rawApps
@@ -107,9 +114,10 @@ public class DashboardController : ControllerBase
     [HttpGet("top-users")]
     public async Task<ActionResult<List<TopUserDto>>> GetTopUsers([FromQuery] int top = 10, [FromQuery] int days = 7)
     {
+        var tenantId = _tenantAccessor.TenantId;
         var from = DateTime.UtcNow.AddDays(-days);
         var users = await _timelineRepo.Query()
-            .Where(t => t.Timestamp >= from && !t.IsDeleted && t.Username != null)
+            .Where(t => t.Timestamp >= from && !t.IsDeleted && t.Username != null && t.TenantId == tenantId)
             .GroupBy(t => t.Username)
             .Select(g => new TopUserDto
             {
@@ -127,8 +135,9 @@ public class DashboardController : ControllerBase
     [HttpGet("recent-events")]
     public async Task<ActionResult<List<TimelineEntryDto>>> GetRecentEvents([FromQuery] int limit = 20)
     {
+        var tenantId = _tenantAccessor.TenantId;
         var events = await _timelineRepo.Query()
-            .Where(t => !t.IsDeleted)
+            .Where(t => !t.IsDeleted && t.TenantId == tenantId)
             .OrderByDescending(t => t.Timestamp)
             .Take(limit)
             .ToListAsync();
@@ -139,8 +148,9 @@ public class DashboardController : ControllerBase
     [HttpGet("activity")]
     public async Task<ActionResult<List<TimelineEntryDto>>> GetActivity([FromQuery] int limit = 100)
     {
+        var tenantId = _tenantAccessor.TenantId;
         var events = await _timelineRepo.Query()
-            .Where(t => !t.IsDeleted)
+            .Where(t => !t.IsDeleted && t.TenantId == tenantId)
             .OrderByDescending(t => t.Timestamp)
             .Take(limit)
             .ToListAsync();
@@ -170,9 +180,10 @@ public class DashboardController : ControllerBase
     [HttpGet("availability")]
     public async Task<ActionResult<List<AvailabilityDto>>> GetAvailability([FromQuery] int days = 30)
     {
+        var tenantId = _tenantAccessor.TenantId;
         var from = DateTime.UtcNow.AddDays(-days);
         var data = await _heartbeatRepo.Query()
-            .Where(h => h.Timestamp >= from)
+            .Where(h => h.Timestamp >= from && h.TenantId == tenantId)
             .GroupBy(h => h.Timestamp.Date)
             .Select(g => new AvailabilityDto
             {
@@ -189,9 +200,10 @@ public class DashboardController : ControllerBase
     [HttpGet("security-overview")]
     public async Task<ActionResult<SecurityOverviewDto>> GetSecurityOverview()
     {
-        var overview = await _cache.GetOrCreateAsync("dashboard:security-overview", async () =>
+        var tenantId = _tenantAccessor.TenantId;
+        var overview = await _cache.GetOrCreateAsync($"dashboard:security-overview:{tenantId}", async () =>
         {
-            var alerts = _alertRepo.Query().Where(a => !a.IsDeleted);
+            var alerts = _alertRepo.Query().Where(a => !a.IsDeleted && a.TenantId == tenantId);
             return new SecurityOverviewDto
             {
                 OpenAlerts = await alerts.CountAsync(a => a.Status == AlertStatus.Open),

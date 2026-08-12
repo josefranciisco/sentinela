@@ -82,6 +82,10 @@
     @apply bg-card/50 backdrop-blur-xl border border-border/50;
   }
 
+  .app-atmosphere {
+    @apply pointer-events-none absolute inset-0 z-0 bg-gradient-to-br from-primary/15 via-transparent to-blue-500/15;
+  }
+
   .card-hover {
     @apply transition-all duration-200 hover:bg-accent/50 hover:border-primary/20;
   }

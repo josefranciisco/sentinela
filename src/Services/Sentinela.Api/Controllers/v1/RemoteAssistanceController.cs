@@ -6,6 +6,7 @@ namespace Sentinela.Api.Controllers.v1;
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/remote")]
 [Authorize]
+[RequirePermission("remote.view")]
 public class RemoteAssistanceController : ControllerBase
 {
     private readonly IRepository<RemoteSession> _sessionRepo;

@@ -1,9 +1,13 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
+import { useQueryClient } from '@tanstack/react-query'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { useDashboardStats, useIncidents } from '@/hooks/useDashboard'
+import { Badge } from '@/components/ui/badge'
+import { useDashboardStats, useDashboardActivity, useIncidents } from '@/hooks/useDashboard'
+import { useComputers } from '@/hooks/useComputers'
+import { useLiveRelativeTime } from '@/hooks/useLiveRelativeTime'
 import { formatRelative, formatDate } from '@/lib/utils'
 import { RefreshCw, Monitor, Users, AlertTriangle, Wifi, WifiOff, Tv, Search, Shield, Clock, ChevronRight, X, ExternalLink, AlertCircle, Info } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
@@ -68,148 +72,294 @@ function translateDescription(description: string): string {
   return translated
 }
 
-function NocOverlay({ onClose, stats }: { onClose: () => void; stats: any }) {
+function HeartbeatTime({ date }: { date?: string | null }) {
+  return <>{useLiveRelativeTime(date)}</>
+}
+
+function NocOverlay({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation()
-  const [currentView, setCurrentView] = useState(0)
   const [time, setTime] = useState(new Date())
+  const { data: stats } = useDashboardStats(true)
+  const { data: incidents } = useIncidents(12, true)
+  const { data: activity } = useDashboardActivity(true)
+  const { data: computersPage } = useComputers({ page: '1', pageSize: '200' })
 
-  useEffect(() => {
-    const interval = setInterval(() => setTime(new Date()), 1000)
-    return () => clearInterval(interval)
-  }, [])
-
-  useEffect(() => {
-    const viewInterval = setInterval(() => setCurrentView((prev) => (prev + 1) % 3), 10000)
-    return () => clearInterval(viewInterval)
-  }, [])
-
-  const views = [
-    { id: 'overview', label: t('noc.overview') },
-    { id: 'alerts', label: t('noc.criticalAlerts') },
-    { id: 'stats', label: t('noc.statistics') },
-  ]
+  const computers = computersPage?.items ?? []
+  const offline = computers.filter((c) => c.status === 'Offline')
+  const online = computers.filter((c) => c.status === 'Online')
+  const recentEvents = (Array.isArray(activity) ? activity : []).slice(0, 12)
+  const criticalIncidents = (incidents ?? []).filter((i: any) =>
+    ['Crítico', 'Alto', 'Critical', 'High'].includes(i.riskLevel)
+  )
 
   const donutData = [
-    { name: t('noc.online'), value: stats?.onlineComputers ?? 0, color: '#22c55e' },
-    { name: t('noc.offline'), value: stats?.offlineComputers ?? 0, color: '#ef4444' },
-    { name: t('noc.away'), value: (stats?.totalComputers ?? 0) - (stats?.onlineComputers ?? 0) - (stats?.offlineComputers ?? 0), color: '#eab308' },
+    { name: t('noc.online'), value: stats?.onlineComputers ?? online.length, color: '#22c55e' },
+    { name: t('noc.offline'), value: stats?.offlineComputers ?? offline.length, color: '#ef4444' },
+    {
+      name: t('noc.away'),
+      value: Math.max(
+        0,
+        (stats?.totalComputers ?? computers.length) -
+          (stats?.onlineComputers ?? online.length) -
+          (stats?.offlineComputers ?? offline.length)
+      ),
+      color: '#eab308',
+    },
   ]
 
+  useEffect(() => {
+    const tick = setInterval(() => setTime(new Date()), 1000)
+    return () => clearInterval(tick)
+  }, [])
+
+  useEffect(() => {
+    const enter = async () => {
+      try {
+        if (!document.fullscreenElement) await document.documentElement.requestFullscreen()
+      } catch {
+        /* fullscreen pode ser bloqueado pelo browser */
+      }
+    }
+    enter()
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
+    }
+  }, [onClose])
+
+  const handleClose = async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen()
+    } catch {
+      /* ignore */
+    }
+    onClose()
+  }
+
   return (
-    <div className="fixed inset-0 z-[70] bg-background overflow-y-auto">
-      <div className="min-h-screen p-8 bg-background">
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
-            <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-blue-500">
-              {t('noc.nocMode')}
-            </h1>
-            <div className="flex gap-2">
-              {views.map((v, i) => (
-                <button
-                  key={v.id}
-                  onClick={() => setCurrentView(i)}
-                  className={`px-3 py-1 rounded-lg text-sm transition-colors ${currentView === i ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}
-                >
-                  {v.label}
-                </button>
-              ))}
+    <div className="fixed inset-0 z-[70] overflow-y-auto bg-background">
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/15 via-transparent to-blue-500/15" />
+      <div className="relative min-h-screen p-6 md:p-8">
+        <div className="flex items-center justify-between gap-4 mb-8 flex-wrap">
+          <div>
+            <div className="flex items-center gap-3">
+              <Shield className="h-7 w-7 text-primary" />
+              <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-blue-500">
+                {t('noc.wallboard', 'Central de Segurança — Wallboard')}
+              </h1>
+              <Badge variant="success" className="animate-pulse">LIVE</Badge>
             </div>
+            <p className="text-sm text-muted-foreground mt-1">
+              {t('noc.wallboardHint', 'Atualização automática a cada 15s · Esc para sair')}
+            </p>
           </div>
-          <div className="flex items-center gap-6">
-            <span className="text-2xl font-mono font-bold">{time.toLocaleTimeString('pt-BR')}</span>
-            <Button variant="outline" onClick={onClose}>{t('noc.exitFullscreen')}</Button>
+          <div className="flex items-center gap-4">
+            <span className="text-3xl font-mono font-bold tabular-nums">
+              {time.toLocaleTimeString('pt-BR')}
+            </span>
+            <Button variant="outline" onClick={handleClose}>
+              {t('noc.exitFullscreen')}
+            </Button>
           </div>
         </div>
 
-        {views[currentView].id === 'overview' && (
-          <div className="space-y-8">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-              {[
-                { label: t('noc.totalComputers'), value: String(stats?.totalComputers ?? 0), icon: Monitor, color: 'from-primary to-blue-500' },
-                { label: t('noc.online'), value: String(stats?.onlineComputers ?? 0), icon: Wifi, color: 'from-emerald-500 to-green-500' },
-                { label: t('noc.offline'), value: String(stats?.offlineComputers ?? 0), icon: WifiOff, color: 'from-red-500 to-rose-500' },
-                { label: t('noc.criticalAlerts'), value: String(stats?.totalAlerts ?? 0), icon: AlertTriangle, color: 'from-amber-500 to-orange-500' },
-              ].map((stat) => (
-                <Card key={stat.label} className="bg-card/80 backdrop-blur border-border/50">
-                  <CardContent className="p-6 text-center">
-                    <div className={`inline-flex p-3 rounded-xl bg-gradient-to-br ${stat.color} text-white mb-3`}>
-                      <stat.icon className="h-7 w-7" />
-                    </div>
-                    <p className="text-4xl font-bold">{stat.value}</p>
-                    <p className="text-sm text-muted-foreground uppercase tracking-wider mt-1">{stat.label}</p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card className="bg-card/80 backdrop-blur border-border/50">
-                <CardContent className="p-6">
-                  <h3 className="text-lg font-semibold mb-4">{t('noc.statusDistribution')}</h3>
-                  <div className="flex items-center gap-8">
-                    <ResponsiveContainer width={200} height={200}>
-                      <PieChart>
-                        <Pie data={donutData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} dataKey="value">
-                          {donutData.map((entry, idx) => (
-                            <Cell key={idx} fill={entry.color} />
-                          ))}
-                        </Pie>
-                      </PieChart>
-                    </ResponsiveContainer>
-                    <div className="space-y-3">
-                      {donutData.map((d) => (
-                        <div key={d.name} className="flex items-center gap-2">
-                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: d.color }} />
-                          <span className="text-sm">{d.name}: <strong>{d.value}</strong></span>
-                        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          {[
+            {
+              label: t('noc.totalComputers'),
+              value: String(stats?.totalComputers ?? computers.length),
+              icon: Monitor,
+              color: 'from-primary to-blue-500',
+            },
+            {
+              label: t('noc.online'),
+              value: String(stats?.onlineComputers ?? online.length),
+              icon: Wifi,
+              color: 'from-emerald-500 to-green-500',
+            },
+            {
+              label: t('noc.offline'),
+              value: String(stats?.offlineComputers ?? offline.length),
+              icon: WifiOff,
+              color: 'from-red-500 to-rose-500',
+            },
+            {
+              label: t('noc.criticalAlerts'),
+              value: String(stats?.criticalAlerts ?? criticalIncidents.length),
+              icon: AlertTriangle,
+              color: 'from-amber-500 to-orange-500',
+            },
+          ].map((stat) => (
+            <Card key={stat.label} className="bg-card/70 backdrop-blur-xl border-border/50">
+              <CardContent className="p-5 text-center">
+                <div className={`inline-flex p-3 rounded-xl bg-gradient-to-br ${stat.color} text-white mb-3`}>
+                  <stat.icon className="h-6 w-6" />
+                </div>
+                <p className="text-4xl font-bold tabular-nums">{stat.value}</p>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider mt-1">{stat.label}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          <Card className="bg-card/70 backdrop-blur-xl border-border/50">
+            <CardHeader>
+              <CardTitle className="text-base">{t('noc.statusDistribution')}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-6">
+                <ResponsiveContainer width={180} height={180}>
+                  <PieChart>
+                    <Pie data={donutData} cx="50%" cy="50%" innerRadius={55} outerRadius={85} dataKey="value">
+                      {donutData.map((entry, idx) => (
+                        <Cell key={idx} fill={entry.color} />
                       ))}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="space-y-3">
+                  {donutData.map((d) => (
+                    <div key={d.name} className="flex items-center gap-2 text-sm">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: d.color }} />
+                      <span>
+                        {d.name}: <strong>{d.value}</strong>
+                      </span>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="bg-card/80 backdrop-blur border-border/50">
-                <CardContent className="p-6">
-                  <h3 className="text-lg font-semibold mb-4">{t('noc.recentActivity')}</h3>
-                  <div className="space-y-3 text-sm text-muted-foreground">
-                    <span>{t('noc.noRecentActivity', 'Nenhuma atividade recente')}</span>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        )}
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
-        {views[currentView].id === 'alerts' && (
-          <div className="space-y-4">
-            <h2 className="text-xl font-bold flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-destructive" />
-              {t('noc.activeCriticalAlerts')}
-            </h2>
-            <p className="text-sm text-muted-foreground">{t('noc.noCriticalAlerts', 'Nenhum alerta crítico no momento')}</p>
-          </div>
-        )}
+          <Card className="bg-card/70 backdrop-blur-xl border-border/50 xl:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-destructive" />
+                {t('noc.activeCriticalAlerts')}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {criticalIncidents.length === 0 && (incidents ?? []).length === 0 ? (
+                <p className="text-sm text-muted-foreground py-6 text-center">
+                  {t('noc.noCriticalAlerts', 'Nenhum incidente ativo no momento')}
+                </p>
+              ) : (
+                <div className="space-y-2 max-h-[280px] overflow-y-auto">
+                  {(criticalIncidents.length > 0 ? criticalIncidents : incidents ?? []).map((incident: any) => (
+                    <div
+                      key={incident.id}
+                      className="flex items-start gap-3 rounded-lg border border-border/50 px-3 py-2.5"
+                    >
+                      <span className="text-lg">{riskIcons[incident.riskLevel] || '⚪'}</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate">
+                          {translateEventType(incident.title || incident.eventType || 'Incidente')}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {incident.computerName || incident.hostname || '—'}
+                          {incident.timestamp ? ` · ${formatRelative(incident.timestamp)}` : ''}
+                        </p>
+                      </div>
+                      <Badge
+                        variant={
+                          incident.riskLevel === 'Crítico' || incident.riskLevel === 'Critical'
+                            ? 'destructive'
+                            : 'warning'
+                        }
+                        className="text-[10px] shrink-0"
+                      >
+                        {incident.riskLevel}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-        {views[currentView].id === 'stats' && (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-            {[
-              { label: t('noc.avgResponseTime'), value: '1.2s', change: '+0.1s' },
-              { label: t('noc.eventsPerMin'), value: '247', change: '+12%' },
-              { label: t('noc.activeSessions'), value: '38', change: '-2' },
-              { label: t('noc.bandwidthUsage'), value: '2.4 Gbps', change: '+8%' },
-              { label: t('noc.cpuUsageAvg'), value: '42%', change: '+3%' },
-              { label: t('noc.memoryUsage'), value: '68%', change: '-1%' },
-              { label: t('noc.diskIo'), value: '156 MB/s', change: '+5%' },
-              { label: t('noc.networkLatency'), value: '4ms', change: '-0.5ms' },
-            ].map((stat) => (
-              <Card key={stat.label} className="bg-card/80 backdrop-blur border-border/50">
-                <CardContent className="p-5 text-center">
-                  <p className="text-muted-foreground text-sm uppercase tracking-wider mb-1">{stat.label}</p>
-                  <p className="text-3xl font-bold">{stat.value}</p>
-                  <p className={`text-sm mt-1 ${stat.change.startsWith('+') ? 'text-emerald-400' : 'text-destructive'}`}>{stat.change}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
+          <Card className="bg-card/70 backdrop-blur-xl border-border/50">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <WifiOff className="h-4 w-4 text-destructive" />
+                {t('noc.offlineMachines', 'Máquinas offline')}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {offline.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4 text-center">
+                  {t('noc.allOnline', 'Todas as máquinas estão online')}
+                </p>
+              ) : (
+                <div className="space-y-2 max-h-[320px] overflow-y-auto">
+                  {offline
+                    .slice()
+                    .sort((a, b) => a.hostname.localeCompare(b.hostname, undefined, { numeric: true }))
+                    .map((c) => (
+                      <div
+                        key={c.id}
+                        className="flex items-center justify-between rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Monitor className="h-4 w-4 text-destructive shrink-0" />
+                          <span className="text-sm font-medium truncate">{c.hostname}</span>
+                        </div>
+                        <span className="text-[10px] text-muted-foreground shrink-0">
+                          <HeartbeatTime date={c.lastHeartbeat} />
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="bg-card/70 backdrop-blur-xl border-border/50 xl:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Clock className="h-4 w-4" />
+                {t('noc.recentActivity')}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {recentEvents.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4 text-center">
+                  {t('noc.noRecentActivity', 'Nenhuma atividade recente')}
+                </p>
+              ) : (
+                <div className="space-y-2 max-h-[320px] overflow-y-auto">
+                  {recentEvents.map((event: any, idx: number) => (
+                    <div
+                      key={event.id || idx}
+                      className="flex items-start gap-3 text-sm py-2 border-b border-border/40 last:border-0"
+                    >
+                      <div className="w-2 h-2 mt-1.5 rounded-full bg-primary/70 shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium truncate">
+                          {translateEventType(event.eventType)}
+                          {event.computerName || event.hostname
+                            ? ` · ${event.computerName || event.hostname}`
+                            : ''}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {translateDescription(event.description || '')}
+                        </p>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground shrink-0">
+                        {event.timestamp ? formatRelative(event.timestamp) : ''}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   )
@@ -363,9 +513,20 @@ function InvestigationModal({ incident, onClose }: { incident: any; onClose: () 
       })
     }
     
-    if (eventTypes.includes('USBConnected') || eventTypes.includes('FileCopy')) {
+    if (eventTypes.includes('FileCopy')) {
       recommendations.push({
-        priority: 'Baixa',
+        priority: 'Crítica',
+        action: 'Investigar exfiltração via USB imediatamente',
+        description: 'Identificar quais arquivos foram copiados, quem estava logado e recolher o dispositivo se possível.'
+      })
+      recommendations.push({
+        priority: 'Alta',
+        action: 'Notificar segurança da informação',
+        description: 'Registrar o incidente e avaliar impacto dos dados transferidos.'
+      })
+    } else if (eventTypes.includes('USBConnected')) {
+      recommendations.push({
+        priority: 'Média',
         action: 'Verificar dispositivo USB',
         description: 'Analisar conteúdo e origem do dispositivo conectado.'
       })
@@ -509,13 +670,30 @@ function InvestigationModal({ incident, onClose }: { incident: any; onClose: () 
 
 export function Dashboard() {
   const { t } = useTranslation()
+  const queryClient = useQueryClient()
   const [autoRefresh, setAutoRefresh] = useState(false)
   const [nocMode, setNocMode] = useState(false)
   const [investigatingIncident, setInvestigatingIncident] = useState<any>(null)
-  const { data: stats } = useDashboardStats()
-  const { data: incidents } = useIncidents(5)
+  const [refreshing, setRefreshing] = useState(false)
+  const { data: stats, isFetching: statsFetching } = useDashboardStats(autoRefresh)
+  const { data: incidents, isFetching: incidentsFetching } = useIncidents(5, autoRefresh)
 
-  if (nocMode) return <NocOverlay onClose={() => setNocMode(false)} stats={stats} />
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    try {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] }),
+        queryClient.invalidateQueries({ queryKey: ['security-incidents'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard-activity'] }),
+      ])
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  if (nocMode) return <NocOverlay onClose={() => setNocMode(false)} />
+
+  const isRefreshing = refreshing || statsFetching || incidentsFetching
 
   const statCards = [
     { label: t('dashboard.totalComputers'), value: stats?.totalComputers ?? 0, icon: Monitor, color: 'from-primary to-blue-500' },
@@ -540,13 +718,29 @@ export function Dashboard() {
         </div>
         <div className="flex items-center gap-2">
           <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
-            <input type="checkbox" checked={autoRefresh} onChange={() => setAutoRefresh(!autoRefresh)} className="rounded" />
+            <input
+              type="checkbox"
+              checked={autoRefresh}
+              onChange={() => setAutoRefresh(!autoRefresh)}
+              className="rounded"
+            />
             {t('dashboard.autoRefresh')}
+            {autoRefresh && (
+              <span className="text-[10px] text-primary">{t('dashboard.every15s', '15s')}</span>
+            )}
           </label>
           <Button variant="outline" size="sm" onClick={() => setNocMode(true)}>
-            <Tv className="h-4 w-4 mr-1" /> {t('dashboard.nocMode', 'Modo NOC')}
+            <Tv className="h-4 w-4 mr-1" /> {t('dashboard.nocMode', 'Wallboard')}
           </Button>
-          <Button variant="outline" size="sm"><RefreshCw className="h-4 w-4" /></Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            title={t('dashboard.refreshNow', 'Atualizar agora')}
+          >
+            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+          </Button>
         </div>
       </div>
 

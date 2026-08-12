@@ -1,4 +1,5 @@
 using Sentinela.Api.Models;
+using Sentinela.Persistence;
 using Sentinela.Persistence.Models;
 using Sentinela.Shared.Core.Interfaces;
 using Sentinela.Shared.Domain.Monitoring;
@@ -30,6 +31,9 @@ public class AgentHub : Hub
     private readonly IEventBus _eventBus;
     private readonly ILogger<AgentHub> _logger;
     private readonly IHubContext<RemoteAssistanceHub> _remoteHubContext;
+    private readonly IHubContext<MonitoringHub> _monitoringHubContext;
+    private readonly IHubContext<AlertHub> _alertHubContext;
+    private readonly TenantAccessor _tenantAccessor;
 
     public AgentHub(
         IRepository<Computer> computerRepo,
@@ -41,7 +45,10 @@ public class AgentHub : Hub
         IRepository<EndpointSecurityStatus> securityStatusRepo,
         IEventBus eventBus,
         ILogger<AgentHub> logger,
-        IHubContext<RemoteAssistanceHub> remoteHubContext)
+        IHubContext<RemoteAssistanceHub> remoteHubContext,
+        IHubContext<MonitoringHub> monitoringHubContext,
+        IHubContext<AlertHub> alertHubContext,
+        TenantAccessor tenantAccessor)
     {
         _computerRepo = computerRepo;
         _heartbeatRepo = heartbeatRepo;
@@ -53,6 +60,9 @@ public class AgentHub : Hub
         _eventBus = eventBus;
         _logger = logger;
         _remoteHubContext = remoteHubContext;
+        _monitoringHubContext = monitoringHubContext;
+        _alertHubContext = alertHubContext;
+        _tenantAccessor = tenantAccessor;
     }
 
     public override async Task OnConnectedAsync()
@@ -64,7 +74,11 @@ public class AgentHub : Hub
     public async Task SendHeartbeat(AgentHeartbeatDto dto)
     {
         var computerId = Guid.TryParse(dto.ComputerId, out var id) ? id : Guid.Empty;
-        var computer = await ResolveComputerAsync(computerId, dto.Hostname, dto.IpAddress, dto.CurrentUser);
+        
+        if (dto.TenantId.HasValue && dto.TenantId.Value != Guid.Empty)
+            _tenantAccessor.SetTenantId(dto.TenantId.Value);
+        
+        var computer = await ResolveComputerAsync(computerId, dto.Hostname, dto.IpAddress, dto.CurrentUser, dto.TenantId);
 
         await Groups.AddToGroupAsync(Context.ConnectionId, $"agent:{computer.Id}");
 
@@ -93,6 +107,10 @@ public class AgentHub : Hub
             _logger.LogWarning("Screen capture without computer id");
             return;
         }
+
+        var computer = await _computerRepo.GetByIdAsync(computerId);
+        if (computer?.TenantId != null && computer.TenantId != Guid.Empty)
+            _tenantAccessor.SetTenantId(computer.TenantId);
 
         ScreenCapture capture;
 
@@ -126,6 +144,7 @@ public class AgentHub : Hub
                 CapturedAt = DateTimeOffset.UtcNow,
                 Status = CaptureStatus.Captured
             };
+            capture.MarkAsUpdated();
             await _captureRepo.AddAsync(capture);
         }
 
@@ -153,8 +172,15 @@ public class AgentHub : Hub
                 continue;
             }
 
+            if (_tenantAccessor.TenantId == Guid.Empty)
+            {
+                var computer = await _computerRepo.GetByIdAsync(computerId);
+                if (computer?.TenantId != null && computer.TenantId != Guid.Empty)
+                    _tenantAccessor.SetTenantId(computer.TenantId);
+            }
+
             var eventType = ParseEventType(e.EventType);
-            var severity = ParseSeverity(e.Severity);
+            var severity = ResolveSeverity(e.EventType, e.Severity);
             var timestamp = e.Timestamp == default ? DateTimeOffset.UtcNow : new DateTimeOffset(e.Timestamp, TimeSpan.Zero);
 
             var entry = new TimelineEntry(
@@ -200,6 +226,13 @@ public class AgentHub : Hub
         {
             _logger.LogWarning("Security status without computer id from {Hostname}", status.Hostname);
             return;
+        }
+
+        if (_tenantAccessor.TenantId == Guid.Empty)
+        {
+            var computer = await _computerRepo.GetByIdAsync(computerId);
+            if (computer?.TenantId != null && computer.TenantId != Guid.Empty)
+                _tenantAccessor.SetTenantId(computer.TenantId);
         }
 
         var existingStatus = _securityStatusRepo.Query()
@@ -256,6 +289,13 @@ public class AgentHub : Hub
         var computerId = ResolveComputerId(inventory.ComputerId);
         if (computerId == Guid.Empty) return;
 
+        if (_tenantAccessor.TenantId == Guid.Empty)
+        {
+            var computer = await _computerRepo.GetByIdAsync(computerId);
+            if (computer?.TenantId != null && computer.TenantId != Guid.Empty)
+                _tenantAccessor.SetTenantId(computer.TenantId);
+        }
+
         var now = DateTimeOffset.UtcNow;
         var incoming = inventory.Items ?? new List<AgentSoftwareItemDto>();
         var existing = _softwareRepo.Query()
@@ -279,6 +319,7 @@ public class AgentHub : Hub
                 await _softwareRepo.AddAsync(new SoftwareInventoryItem
                 {
                     ComputerId = computerId,
+                    TenantId = _tenantAccessor.TenantId,
                     Name = item.Name,
                     Version = item.Version ?? "",
                     Publisher = item.Publisher ?? "",
@@ -344,7 +385,7 @@ public class AgentHub : Hub
             });
     }
 
-    private async Task<Computer> ResolveComputerAsync(Guid computerId, string hostname, string ipAddress, string currentUser)
+    private async Task<Computer> ResolveComputerAsync(Guid computerId, string hostname, string ipAddress, string currentUser, Guid? tenantId = null)
     {
         Computer? computer = null;
         if (computerId != Guid.Empty)
@@ -358,13 +399,18 @@ public class AgentHub : Hub
             computer = computerId != Guid.Empty
                 ? new Computer(computerId, hostname, ipAddress, "unknown")
                 : new Computer(hostname, ipAddress, "unknown");
+            computer.TenantId = tenantId ?? Guid.Empty;
             computer.UpdateHeartbeat(ipAddress, currentUser);
             computer.UpdateStatus(ComputerStatus.Online);
             await _computerRepo.AddAsync(computer);
-            _logger.LogInformation("Computer auto-registered: {Hostname} ({Id})", hostname, computer.Id);
+            _logger.LogInformation("Computer auto-registered: {Hostname} ({Id}) for tenant {TenantId}", hostname, computer.Id, tenantId);
         }
         else
         {
+            if (computer.TenantId == Guid.Empty && tenantId.HasValue && tenantId.Value != Guid.Empty)
+            {
+                computer.TenantId = tenantId.Value;
+            }
             computer.UpdateStatus(ComputerStatus.Online);
             computer.UpdateHeartbeat(ipAddress, currentUser);
         }
@@ -395,16 +441,43 @@ public class AgentHub : Hub
 
         await _securityEventRepo.AddAsync(securityEvent);
 
-        await Clients.Group("admins").SendAsync("SecurityEvent", new
+        var computer = await _computerRepo.GetByIdAsync(computerId);
+        var payload = new
         {
             securityEvent.Id,
             securityEvent.ComputerId,
+            ComputerName = computer?.Hostname,
             securityEvent.EventType,
             securityEvent.Category,
             securityEvent.Description,
-            securityEvent.Severity,
-            securityEvent.Timestamp
+            Severity = securityEvent.Severity.ToString(),
+            securityEvent.Timestamp,
+            Details = details
+        };
+
+        // Agent hub group (legacy / agents)
+        await Clients.Group("admins").SendAsync("SecurityEvent", payload);
+
+        // Web clients connect to MonitoringHub / AlertHub — bridge realtime alerts there
+        await _monitoringHubContext.Clients.Group("admins").SendAsync("SecurityEvent", payload);
+        await _alertHubContext.Clients.Group("security").SendAsync("SecurityEvent", payload);
+        await _alertHubContext.Clients.Group("security").SendAsync("AlertCreated", new
+        {
+            Id = securityEvent.Id,
+            Title = securityEvent.EventType,
+            Description = securityEvent.Description,
+            Severity = securityEvent.Severity.ToString(),
+            Category = securityEvent.Category,
+            ComputerId = securityEvent.ComputerId,
+            ComputerName = computer?.Hostname,
+            CreatedAt = securityEvent.Timestamp
         });
+
+        if (securityEvent.Severity is Severity.High or Severity.Critical)
+        {
+            await _alertHubContext.Clients.Group($"severity:{securityEvent.Severity}")
+                .SendAsync("SecurityEvent", payload);
+        }
 
         try
         {
@@ -460,6 +533,18 @@ public class AgentHub : Hub
     {
         if (string.IsNullOrWhiteSpace(value)) return Severity.Info;
         return Enum.TryParse<Severity>(value, true, out var parsed) ? parsed : Severity.Info;
+    }
+
+    /// <summary>
+    /// Política de severidade: cópia para USB é sempre crítica (exfiltração de dados).
+    /// </summary>
+    private static Severity ResolveSeverity(string? eventType, string? severityValue)
+    {
+        if (string.Equals(eventType, "FileCopy", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(eventType, "FileTransfer", StringComparison.OrdinalIgnoreCase))
+            return Severity.Critical;
+
+        return ParseSeverity(severityValue);
     }
 }
 

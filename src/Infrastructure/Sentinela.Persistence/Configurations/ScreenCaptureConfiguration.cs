@@ -12,6 +12,8 @@ public class ScreenCaptureConfiguration : IEntityTypeConfiguration<ScreenCapture
 
         builder.HasKey(s => s.Id);
 
+        builder.Property(e => e.TenantId);
+
         builder.Property(s => s.RequestedBy)
             .HasMaxLength(255);
 

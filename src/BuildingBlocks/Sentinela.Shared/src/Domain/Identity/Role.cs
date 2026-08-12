@@ -4,25 +4,53 @@ namespace Sentinela.Shared.Domain.Identity;
 
 public class Role : BaseEntity
 {
-    private readonly List<Permission> _permissions = new();
+    public string Name { get; private set; } = string.Empty;
+    public string? Description { get; private set; }
+    public bool IsSystemRole { get; private set; }
+    public bool IsDefault { get; private set; }
 
-    protected Role() : base() { }
+    private readonly List<RolePermission> _rolePermissions = new();
+    public IReadOnlyCollection<RolePermission> RolePermissions => _rolePermissions.AsReadOnly();
 
-    public Role(string name, string? description = null, bool isSystem = false) : base()
+    private Role() { }
+
+    public Role(string name, string? description = null, bool isSystemRole = false, bool isDefault = false)
     {
         Name = name;
         Description = description;
-        IsSystem = isSystem;
+        IsSystemRole = isSystemRole;
+        IsDefault = isDefault;
     }
 
-    public string Name { get; private set; }
-    public string? Description { get; private set; }
-    public bool IsSystem { get; private set; }
-
-    public IReadOnlyList<Permission> Permissions => _permissions.AsReadOnly();
-
-    public void AddPermission(string action, string resource, string? scope = null)
+    public void UpdateName(string name)
     {
-        _permissions.Add(new Permission(action, resource, scope));
+        if (IsSystemRole)
+            throw new InvalidOperationException("Cannot rename a system role.");
+        Name = name;
+    }
+
+    public void UpdateDescription(string? description)
+    {
+        Description = description;
+    }
+
+    public void SetPermissions(List<RolePermission> permissions)
+    {
+        _rolePermissions.Clear();
+        _rolePermissions.AddRange(permissions);
+    }
+
+    public void AddPermission(RolePermission permission)
+    {
+        if (_rolePermissions.Any(p => p.PermissionId == permission.PermissionId))
+            return;
+        _rolePermissions.Add(permission);
+    }
+
+    public void RemovePermission(Guid permissionId)
+    {
+        var existing = _rolePermissions.FirstOrDefault(p => p.PermissionId == permissionId);
+        if (existing is not null)
+            _rolePermissions.Remove(existing);
     }
 }

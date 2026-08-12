@@ -12,6 +12,8 @@ public class UsbEventConfiguration : IEntityTypeConfiguration<UsbEvent>
 
         builder.HasKey(u => u.Id);
 
+        builder.Property(e => e.TenantId);
+
         builder.Property(u => u.DeviceId)
             .IsRequired()
             .HasMaxLength(255);

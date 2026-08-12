@@ -48,6 +48,7 @@ public class IdentityDbContext : IdentityDbContext<ApplicationUser, ApplicationR
         {
             entity.ToTable("users");
 
+            entity.Property(u => u.TenantId).HasColumnName("tenant_id");
             entity.Property(u => u.Department).HasMaxLength(128);
             entity.Property(u => u.FullName).HasMaxLength(256);
             entity.Property(u => u.TwoFactorSecret).HasMaxLength(128);
@@ -55,6 +56,7 @@ public class IdentityDbContext : IdentityDbContext<ApplicationUser, ApplicationR
             entity.Property(u => u.SsoProvider).HasMaxLength(64);
             entity.Property(u => u.SsoSubjectId).HasMaxLength(256);
 
+            entity.HasIndex(u => u.TenantId).HasDatabaseName("ix_users_tenant_id");
             entity.HasIndex(u => u.SsoSubjectId).HasDatabaseName("ix_users_sso_subject_id");
         });
 

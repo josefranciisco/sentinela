@@ -12,6 +12,8 @@ public class FileTransferConfiguration : IEntityTypeConfiguration<FileTransferRe
 
         builder.HasKey(t => t.Id);
 
+        builder.Property(e => e.TenantId);
+
         builder.Property(t => t.SessionId)
             .IsRequired();
 

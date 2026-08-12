@@ -5,7 +5,7 @@ namespace Sentinela.Identity.Services;
 
 public interface ITokenService
 {
-    (string accessToken, DateTimeOffset expiresAt) GenerateAccessToken(ApplicationUser user, IList<string> roles);
+    (string accessToken, DateTimeOffset expiresAt) GenerateAccessToken(ApplicationUser user, IList<string> roles, IList<string>? permissions = null);
     string GenerateRefreshToken();
     ClaimsPrincipal? GetPrincipalFromExpiredToken(string token);
     Task<bool> RevokeRefreshToken(string refreshToken);

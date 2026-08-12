@@ -12,6 +12,8 @@ public class HeartbeatConfiguration : IEntityTypeConfiguration<Heartbeat>
 
         builder.HasKey(h => h.Id);
 
+        builder.Property(e => e.TenantId);
+
         builder.Property(h => h.Status)
             .IsRequired()
             .HasConversion<string>()

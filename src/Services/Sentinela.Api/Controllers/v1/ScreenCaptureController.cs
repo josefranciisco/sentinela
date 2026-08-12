@@ -11,6 +11,7 @@ namespace Sentinela.Api.Controllers.v1;
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/screencapture")]
 [Authorize]
+[RequirePermission("screenshots.view")]
 public class ScreenCaptureController : ControllerBase
 {
     private readonly IRepository<Screenshot> _screenshotRepo;
@@ -76,7 +77,7 @@ public class ScreenCaptureController : ControllerBase
     public async Task<IActionResult> UploadScreenshot()
     {
         var form = await Request.ReadFormAsync();
-        var computerId = form["ComputerId"].FirstOrDefault() ?? "";
+        var computerIdValue = form["ComputerId"].FirstOrDefault() ?? "";
         var requestId = form["RequestId"].FirstOrDefault() ?? Guid.NewGuid().ToString();
         var monitorName = form["MonitorName"].FirstOrDefault() ?? "Primary";
         var width = int.TryParse(form["Width"].FirstOrDefault(), out var w) ? w : 0;
@@ -88,6 +89,15 @@ public class ScreenCaptureController : ControllerBase
 
         if (imageFile == null)
             return BadRequest("Image file is required");
+
+        var computerId = Guid.TryParse(computerIdValue, out var parsedComputerId) ? parsedComputerId : Guid.Empty;
+        var tenantId = Guid.Empty;
+        if (computerId != Guid.Empty)
+        {
+            var computer = await _computerRepo.GetByIdAsync(computerId);
+            if (computer != null)
+                tenantId = computer.TenantId;
+        }
 
         var storagePath = Path.Combine(_env.ContentRootPath, "Storage", "Screenshots");
         Directory.CreateDirectory(storagePath);
@@ -107,7 +117,8 @@ public class ScreenCaptureController : ControllerBase
 
         var screenshot = new Screenshot
         {
-            ComputerId = Guid.TryParse(computerId, out var cid) ? cid : Guid.Empty,
+            ComputerId = computerId,
+            TenantId = tenantId,
             RequestId = requestId,
             MonitorName = monitorName,
             Width = width,

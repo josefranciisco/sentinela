@@ -12,6 +12,8 @@ public class ScreenshotConfiguration : IEntityTypeConfiguration<Screenshot>
 
         builder.HasKey(s => s.Id);
 
+        builder.Property(e => e.TenantId);
+
         builder.Property(s => s.RequestId)
             .IsRequired()
             .HasMaxLength(64);

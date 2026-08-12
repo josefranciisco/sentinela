@@ -61,9 +61,24 @@ public class Computer : AggregateRoot
         LastHeartbeat = DateTimeOffset.UtcNow;
     }
 
+    public void MarkOffline()
+    {
+        Status = ComputerStatus.Offline;
+    }
+
     public void UpdateMonitorCount(int monitorCount)
     {
         if (monitorCount > 0) MonitorCount = monitorCount;
+    }
+
+    public void UpdateHostname(string hostname)
+    {
+        Hostname = hostname;
+    }
+
+    public void UpdateDepartment(string? department)
+    {
+        Department = string.IsNullOrWhiteSpace(department) ? null : department.Trim();
     }
 
     public void AddHeartbeat(Heartbeat heartbeat)

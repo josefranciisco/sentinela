@@ -1,4 +1,5 @@
 using Sentinela.Api.Hubs;
+using Sentinela.Api.Middleware;
 
 
 namespace Sentinela.Api.Configuration;
@@ -17,6 +18,7 @@ public static class ApiPipelineConfiguration
         app.UseResponseCaching();
         app.UseCors("SentinelaCors");
         app.UseAuthentication();
+        app.UseMiddleware<TenantMiddleware>();
         app.UseAuthorization();
         app.MapControllers();
         app.MapHub<MonitoringHub>("/hubs/monitoring");
