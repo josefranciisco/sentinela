@@ -12,6 +12,14 @@ export function formatDate(date: string | Date, fmt = 'dd/MM/yyyy HH:mm') {
 }
 
 export function formatRelative(date: string | Date) {
+  const now = Date.now()
+  const then = new Date(date).getTime()
+  const seconds = Math.max(0, Math.floor((now - then) / 1000))
+
+  if (seconds < 60) {
+    return `há ${seconds} segundo${seconds !== 1 ? 's' : ''}`
+  }
+
   return formatDistanceToNow(new Date(date), { addSuffix: true, locale: ptBR })
 }
 

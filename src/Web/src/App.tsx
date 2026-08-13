@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { Layout } from '@/components/layout/Layout'
 import { Dashboard } from '@/pages/Dashboard'
 import { Login } from '@/pages/Login'
+import { SsoCallback } from '@/pages/SsoCallback'
 import { Computers } from '@/pages/Computers'
 import { ComputerDetail } from '@/pages/ComputerDetail'
 import { Settings } from '@/pages/Settings'
@@ -33,6 +34,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/sso-callback" element={<SsoCallback />} />
       <Route path="/access-denied" element={<PrivateRoute><AccessDenied /></PrivateRoute>} />
       <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
       <Route path="/computers" element={<PrivateRoute><Computers /></PrivateRoute>} />

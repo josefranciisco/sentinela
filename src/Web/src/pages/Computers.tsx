@@ -3,78 +3,22 @@ import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@/components/ui/table'
-import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { useComputers, useUpdateComputer } from '@/hooks/useComputers'
+import { Dialog, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { HasPermission } from '@/components/HasPermission'
+import { useComputers, useDepartments, useDeleteComputer } from '@/hooks/useComputers'
 import { useLiveRelativeTime } from '@/hooks/useLiveRelativeTime'
-import { Search, ChevronLeft, ChevronRight, Monitor, Pencil } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight, Monitor, Trash2, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 function HeartbeatTime({ date }: { date: string | null }) {
   return <>{useLiveRelativeTime(date)}</>
 }
 
-const statusColors: Record<string, 'success' | 'destructive' | 'warning'> = {
-  Online: 'success', Offline: 'destructive', Away: 'warning',
-}
-
-function EditableCell({
-  value,
-  onSave,
-  className,
-}: {
-  value: string
-  onSave: (next: string) => void
-  className?: string
-}) {
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState('')
-
-  const startEdit = () => {
-    setDraft(value)
-    setEditing(true)
-  }
-
-  const commit = () => {
-    setEditing(false)
-    const next = draft.trim()
-    if (next && next !== value) onSave(next)
-  }
-
-  if (editing) {
-    return (
-      <Input
-        autoFocus
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') commit()
-          if (e.key === 'Escape') setEditing(false)
-        }}
-        onClick={(e) => e.stopPropagation()}
-        onFocus={(e) => e.target.select()}
-        className="h-7 w-full min-w-28 text-sm"
-      />
-    )
-  }
-
-  return (
-    <button
-      type="button"
-      className={`group inline-flex items-center gap-1.5 text-left hover:text-foreground ${className ?? ''}`}
-      onClick={(e) => {
-        e.stopPropagation()
-        startEdit()
-      }}
-      title="Clique para editar"
-    >
-      <span className="truncate">{value || '-'}</span>
-      <Pencil className="h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-60" />
-    </button>
-  )
+const statusColors: Record<string, 'success' | 'destructive' | 'warning' | 'secondary'> = {
+  Online: 'success', Offline: 'destructive', Away: 'warning', Disabled: 'secondary',
 }
 
 export function Computers() {
@@ -91,18 +35,26 @@ export function Computers() {
   if (department) params.department = department
 
   const { data, isLoading } = useComputers(params)
-  const updateComputer = useUpdateComputer()
+  const { data: departments = [] } = useDepartments()
+  const deleteComputer = useDeleteComputer()
+  const [confirmDelete, setConfirmDelete] = useState<any | null>(null)
   const { t } = useTranslation()
 
-  const handleSave = (id: string, data: Partial<{ hostname: string; department: string }>) => {
-    updateComputer.mutate(
-      { id, data },
-      {
-        onSuccess: () => toast.success(t('computers.updated', 'Computador atualizado')),
-        onError: () => toast.error(t('computers.updateFailed', 'Falha ao atualizar')),
-      }
-    )
-  }
+  const statusOptions = [
+    { value: '', label: t('computers.allStatus') },
+    { value: 'Online', label: t('computers.statusOnline') },
+    { value: 'Offline', label: t('computers.statusOffline') },
+    { value: 'Away', label: t('computers.statusAway') },
+    { value: 'Disabled', label: t('computers.statusDisabled') },
+  ]
+
+  const departmentOptions = [
+    { value: '', label: t('computers.allDepartments') },
+    ...departments.map((d) => ({ value: d, label: d })),
+  ]
+
+  const statusLabel = (status: string) =>
+    t(`computers.status${status}`, status)
 
   const updateParams = () => {
     const sp = new URLSearchParams()
@@ -142,11 +94,11 @@ export function Computers() {
                 />
               </div>
               <Select
-                options={[{ value: '', label: t('computers.allStatus') }, { value: 'Online', label: 'Online' }, { value: 'Offline', label: 'Offline' }, { value: 'Away', label: 'Away' }]}
+                options={statusOptions}
                 value={status} onChange={(e) => { setStatus(e.target.value); setTimeout(updateParams, 0) }}
               />
               <Select
-                options={[{ value: '', label: t('computers.allDepartments') }, { value: 'IT', label: 'IT' }, { value: 'HR', label: 'HR' }, { value: 'Finance', label: 'Finance' }]}
+                options={departmentOptions}
                 value={department} onChange={(e) => { setDepartment(e.target.value); setTimeout(updateParams, 0) }}
               />
               <Button variant="secondary" size="sm" onClick={updateParams}>{t('computers.filter')}</Button>
@@ -163,31 +115,42 @@ export function Computers() {
                 <TableHead>{t('computers.department')}</TableHead>
                 <TableHead>{t('computers.status')}</TableHead>
                 <TableHead>{t('computers.lastHeartbeat')}</TableHead>
+                <TableHead></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">{t('computers.loading')}</TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">{t('computers.loading')}</TableCell></TableRow>
               ) : data?.items.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">{t('computers.noComputers')}</TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">{t('computers.noComputers')}</TableCell></TableRow>
               ) : (
                 data?.items.map((computer) => (
                   <TableRow key={computer.id} className="cursor-pointer" onClick={() => navigate(`/computers/${computer.id}`)}>
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-2">
                         <Monitor className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <EditableCell value={computer.hostname} onSave={(v) => handleSave(computer.id, { hostname: v })} />
+                        <span className="truncate">{computer.hostname || '-'}</span>
                       </div>
                     </TableCell>
                     <TableCell className="text-muted-foreground font-mono text-xs">{computer.ipAddress}</TableCell>
                     <TableCell>{computer.currentUser || '-'}</TableCell>
+                    <TableCell>{computer.department || '-'}</TableCell>
                     <TableCell>
-                      <EditableCell value={computer.department || ''} onSave={(v) => handleSave(computer.id, { department: v })} />
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={statusColors[computer.status]}>{computer.status}</Badge>
+                      <Badge variant={statusColors[computer.status]}>{statusLabel(computer.status)}</Badge>
                     </TableCell>
                     <TableCell className="text-muted-foreground text-xs"><HeartbeatTime date={computer.lastHeartbeat} /></TableCell>
+                    <TableCell className="text-right">
+                      <HasPermission permission="machines.delete">
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setConfirmDelete(computer) }}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                          title={t('computers.delete')}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </HasPermission>
+                    </TableCell>
                   </TableRow>
                 ))
               )}
@@ -209,6 +172,38 @@ export function Computers() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!confirmDelete} onClose={() => setConfirmDelete(null)}>
+        <DialogHeader>
+          <DialogTitle>{t('computers.confirmDeleteTitle')}</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          {t('computers.confirmDeleteMessage')}
+        </p>
+        <p className="text-sm font-medium">{confirmDelete?.hostname}</p>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setConfirmDelete(null)}>{t('computers.cancel')}</Button>
+          <Button
+            variant="destructive"
+            disabled={deleteComputer.isPending}
+            onClick={() => {
+              if (!confirmDelete) return
+              deleteComputer.mutate(confirmDelete.id, {
+                onSuccess: () => {
+                  toast.success(t('computers.deleted'))
+                  setConfirmDelete(null)
+                },
+                onError: () => {
+                  toast.error(t('computers.deleteFailed'))
+                  setConfirmDelete(null)
+                },
+              })
+            }}
+          >
+            {deleteComputer.isPending ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> {t('computers.delete')}</> : t('computers.delete')}
+          </Button>
+        </DialogFooter>
+      </Dialog>
     </div>
   )
 }

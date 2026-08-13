@@ -45,6 +45,25 @@ export function useComputerAlerts(computerId: string) {
   })
 }
 
+export function useDeleteComputer() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/computers/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['computers'] })
+      queryClient.invalidateQueries({ queryKey: ['computer-departments'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] })
+    },
+  })
+}
+
+export function useDepartments() {
+  return useQuery<string[]>({
+    queryKey: ['computer-departments'],
+    queryFn: () => api.get('/computers/departments'),
+  })
+}
+
 export function useUpdateComputer() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -53,6 +72,7 @@ export function useUpdateComputer() {
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ['computers'] })
       queryClient.invalidateQueries({ queryKey: ['computer', id] })
+      queryClient.invalidateQueries({ queryKey: ['computer-departments'] })
     },
   })
 }

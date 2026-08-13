@@ -98,6 +98,17 @@ public class AuthService : IAuthService
         return await GenerateLoginResponseAsync(user, deviceInfo, ipAddress);
     }
 
+    public async Task<LoginResponse> LoginExternalAsync(Guid userId, string? deviceInfo, string? ipAddress)
+    {
+        var user = await _userManager.FindByIdAsync(userId.ToString());
+        if (user is null || !user.IsActive)
+        {
+            throw new UnauthorizedAccessException("User not found or inactive.");
+        }
+
+        return await GenerateLoginResponseAsync(user, deviceInfo, ipAddress);
+    }
+
     public async Task<LoginResponse> RegisterAsync(RegisterRequest request)
     {
         var existingUser = await _userManager.FindByNameAsync(request.Username);

@@ -1,6 +1,5 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -22,7 +21,6 @@ public static class ServiceCollectionExtensions
             ?? throw new InvalidOperationException("JWT configuration is required.");
 
         var ldapConfig = configuration.GetSection("Ldap").Get<LdapConfiguration>();
-        var ssoConfig = configuration.GetSection("Sso").Get<SsoConfiguration>();
 
         services.Configure<JwtConfiguration>(configuration.GetSection("Jwt"));
         services.Configure<LdapConfiguration>(configuration.GetSection("Ldap"));
@@ -89,25 +87,6 @@ public static class ServiceCollectionExtensions
             };
         });
 
-        if (ssoConfig?.Enabled == true)
-        {
-            services.AddAuthentication()
-                .AddOpenIdConnect(ssoConfig.DefaultScheme, options =>
-                {
-                    options.Authority = ssoConfig.Authority;
-                    options.ClientId = ssoConfig.ClientId;
-                    options.ClientSecret = ssoConfig.ClientSecret;
-                    options.CallbackPath = ssoConfig.CallbackPath;
-                    options.ResponseType = "code";
-                    options.SaveTokens = true;
-                    options.GetClaimsFromUserInfoEndpoint = true;
-                    foreach (var scope in ssoConfig.Scopes)
-                    {
-                        options.Scope.Add(scope);
-                    }
-                });
-        }
-
         services.AddAuthorization(options =>
         {
             options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin", "SuperAdmin"));
@@ -159,10 +138,8 @@ public static class ServiceCollectionExtensions
             services.AddScoped<ILdapService, LdapService>();
         }
 
-        if (ssoConfig?.Enabled == true)
-        {
-            services.AddScoped<ISsoService, SsoService>();
-        }
+        services.AddHttpClient("Sso");
+        services.AddScoped<ISsoService, SsoService>();
 
         services.AddHttpContextAccessor();
 

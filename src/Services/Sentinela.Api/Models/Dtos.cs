@@ -175,6 +175,8 @@ public class DashboardStatsDto
     public int TotalComputers { get; set; }
     public int OnlineComputers { get; set; }
     public int OfflineComputers { get; set; }
+    public int AwayComputers { get; set; }
+    public int DisabledComputers { get; set; }
     public int TotalUsers { get; set; }
     public int TotalDepartments { get; set; }
     public int TotalAlerts { get; set; }

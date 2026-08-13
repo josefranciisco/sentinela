@@ -54,6 +54,8 @@ export interface DashboardStats {
   totalComputers: number
   onlineComputers: number
   offlineComputers: number
+  awayComputers: number
+  disabledComputers: number
   totalUsers: number
   totalDepartments: number
   totalAlerts: number

@@ -176,6 +176,21 @@ public class ComputersController : ControllerBase
 
         return Ok(_mapper.Map<ComputerDto>(computer));
     }
+
+    [HttpDelete("{id}")]
+    [RequirePermission("machines.delete")]
+    public async Task<IActionResult> DeleteComputer(Guid id)
+    {
+        var tenantId = _tenantAccessor.TenantId;
+        var computer = await _computerRepo.Query()
+            .FirstOrDefaultAsync(c => c.Id == id && c.TenantId == tenantId && !c.IsDeleted);
+        if (computer is null) return NotFound();
+
+        await _computerRepo.DeleteAsync(computer);
+        _logger.LogInformation("Computer {Id} ({Hostname}) deleted by {User}", id, computer.Hostname, User.Identity?.Name);
+        return NoContent();
+    }
+
     public async Task<ActionResult<List<ComputerSoftwareItemDto>>> GetSoftware(
         Guid id,
         [FromQuery] string? search = null)
@@ -326,6 +341,20 @@ public class ComputersController : ControllerBase
         return Accepted(new { commandId, computerId = id, message = "Sync requested" });
     }
 
+    [HttpGet("departments")]
+    public async Task<ActionResult<List<string>>> GetDepartments()
+    {
+        var tenantId = _tenantAccessor.TenantId;
+        var departments = await _computerRepo.Query()
+            .Where(c => !c.IsDeleted && c.TenantId == tenantId && c.Department != null && c.Department != "")
+            .Select(c => c.Department!)
+            .Distinct()
+            .OrderBy(d => d)
+            .ToListAsync();
+
+        return Ok(departments);
+    }
+
     [HttpGet("stats")]
     public async Task<ActionResult<DashboardStatsDto>> GetStats()
     {
@@ -338,6 +367,8 @@ public class ComputersController : ControllerBase
                 TotalComputers = await computers.CountAsync(),
                 OnlineComputers = await computers.CountAsync(c => c.Status == ComputerStatus.Online),
                 OfflineComputers = await computers.CountAsync(c => c.Status == ComputerStatus.Offline),
+                AwayComputers = await computers.CountAsync(c => c.Status == ComputerStatus.Away),
+                DisabledComputers = await computers.CountAsync(c => c.Status == ComputerStatus.Disabled),
                 TotalUsers = await computers.Select(c => c.CurrentUser).Distinct().CountAsync(),
                 TotalDepartments = await computers.Select(c => c.Department).Distinct().CountAsync(),
                 TotalAlerts = await _alertRepo.Query().CountAsync(a => a.Status == AlertStatus.Open && a.TenantId == tenantId),

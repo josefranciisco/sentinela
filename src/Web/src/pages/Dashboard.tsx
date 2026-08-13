@@ -9,7 +9,7 @@ import { useDashboardStats, useDashboardActivity, useIncidents } from '@/hooks/u
 import { useComputers } from '@/hooks/useComputers'
 import { useLiveRelativeTime } from '@/hooks/useLiveRelativeTime'
 import { formatRelative, formatDate } from '@/lib/utils'
-import { RefreshCw, Monitor, Users, AlertTriangle, Wifi, WifiOff, Tv, Search, Shield, Clock, ChevronRight, X, ExternalLink, AlertCircle, Info } from 'lucide-react'
+import { RefreshCw, Monitor, AlertTriangle, Wifi, WifiOff, Tv, Search, Shield, Clock, ChevronRight, X, ExternalLink, AlertCircle, Info } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
 
 const riskColors: Record<string, string> = {
@@ -95,16 +95,8 @@ function NocOverlay({ onClose }: { onClose: () => void }) {
   const donutData = [
     { name: t('noc.online'), value: stats?.onlineComputers ?? online.length, color: '#22c55e' },
     { name: t('noc.offline'), value: stats?.offlineComputers ?? offline.length, color: '#ef4444' },
-    {
-      name: t('noc.away'),
-      value: Math.max(
-        0,
-        (stats?.totalComputers ?? computers.length) -
-          (stats?.onlineComputers ?? online.length) -
-          (stats?.offlineComputers ?? offline.length)
-      ),
-      color: '#eab308',
-    },
+    { name: t('noc.away'), value: stats?.awayComputers ?? 0, color: '#eab308' },
+    { name: t('noc.disabled'), value: stats?.disabledComputers ?? 0, color: '#64748b' },
   ]
 
   useEffect(() => {
@@ -150,7 +142,7 @@ function NocOverlay({ onClose }: { onClose: () => void }) {
             <div className="flex items-center gap-3">
               <Shield className="h-7 w-7 text-primary" />
               <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-blue-500">
-                {t('noc.wallboard', 'Central de Segurança — Wallboard')}
+                {t('noc.wallboard', 'Central de Segurança — Monitor')}
               </h1>
               <Badge variant="success" className="animate-pulse">LIVE</Badge>
             </div>
@@ -700,13 +692,13 @@ export function Dashboard() {
     { label: t('dashboard.online'), value: stats?.onlineComputers ?? 0, icon: Wifi, color: 'from-emerald-500 to-green-500' },
     { label: t('dashboard.offline'), value: stats?.offlineComputers ?? 0, icon: WifiOff, color: 'from-red-500 to-rose-500' },
     { label: t('dashboard.activeAlerts'), value: stats?.totalAlerts ?? 0, icon: AlertTriangle, color: 'from-amber-500 to-orange-500' },
-    { label: t('dashboard.users'), value: stats?.totalUsers ?? 0, icon: Users, color: 'from-violet-500 to-purple-500' },
   ]
 
   const donutData = [
     { name: t('dashboard.online'), value: stats?.onlineComputers ?? 0, color: '#22c55e' },
     { name: t('dashboard.offline'), value: stats?.offlineComputers ?? 0, color: '#ef4444' },
-    { name: t('dashboard.away'), value: (stats?.totalComputers ?? 0) - (stats?.onlineComputers ?? 0) - (stats?.offlineComputers ?? 0), color: '#eab308' },
+    { name: t('dashboard.away'), value: stats?.awayComputers ?? 0, color: '#eab308' },
+    { name: t('dashboard.disabled'), value: stats?.disabledComputers ?? 0, color: '#64748b' },
   ]
 
   return (
@@ -730,7 +722,7 @@ export function Dashboard() {
             )}
           </label>
           <Button variant="outline" size="sm" onClick={() => setNocMode(true)}>
-            <Tv className="h-4 w-4 mr-1" /> {t('dashboard.nocMode', 'Wallboard')}
+            <Tv className="h-4 w-4 mr-1" /> {t('dashboard.nocMode', 'Monitor')}
           </Button>
           <Button
             variant="outline"

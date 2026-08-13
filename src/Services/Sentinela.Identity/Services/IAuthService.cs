@@ -5,6 +5,7 @@ namespace Sentinela.Identity.Services;
 public interface IAuthService
 {
     Task<LoginResponse> LoginAsync(LoginRequest request, string? deviceInfo, string? ipAddress);
+    Task<LoginResponse> LoginExternalAsync(Guid userId, string? deviceInfo, string? ipAddress);
     Task<LoginResponse> RegisterAsync(RegisterRequest request);
     Task<LoginResponse> RefreshTokenAsync(RefreshTokenRequest request);
     Task LogoutAsync(string refreshToken);

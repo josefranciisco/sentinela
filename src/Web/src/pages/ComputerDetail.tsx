@@ -9,11 +9,12 @@ import { Input } from '@/components/ui/input'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@/components/ui/table'
 import { Dialog, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { HasPermission } from '@/components/HasPermission'
 import { api } from '@/lib/api'
-import { useComputer, useComputerTimeline } from '@/hooks/useComputers'
+import { useComputer, useComputerTimeline, useDepartments, useUpdateComputer } from '@/hooks/useComputers'
 import { useLiveRelativeTime } from '@/hooks/useLiveRelativeTime'
 import { formatDate, formatRelative, formatDuration } from '@/lib/utils'
-import { ArrowLeft, Monitor, Clock, Shield, Camera, Radio, Download, Search, Eye, Trash2, Loader2, Maximize2, X, AlertTriangle, User, Package, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Monitor, Clock, Shield, Camera, Radio, Download, Search, Eye, Trash2, Loader2, Maximize2, X, AlertTriangle, User, Package, RefreshCw, Pencil, Save } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth'
 
@@ -598,6 +599,39 @@ export function ComputerDetail() {
   const { data: computer, isLoading } = useComputer(id!)
   const { data: timeline } = useComputerTimeline(id!)
   const lastHeartbeatLabel = useLiveRelativeTime(computer?.lastHeartbeat)
+  const { data: departments = [] } = useDepartments()
+  const updateComputer = useUpdateComputer()
+
+  const [editOpen, setEditOpen] = useState(false)
+  const [editName, setEditName] = useState('')
+  const [editDepartment, setEditDepartment] = useState('')
+
+  const openEdit = () => {
+    setEditName(computer?.hostname || '')
+    setEditDepartment(computer?.department || '')
+    setEditOpen(true)
+  }
+
+  const handleSave = () => {
+    if (!editName.trim()) {
+      toast.error(t('computerDetail.editNameRequired', 'Informe um nome para o computador'))
+      return
+    }
+    const data: Partial<{ hostname: string; department: string }> = { hostname: editName.trim() }
+    if (editDepartment.trim() !== computer?.department) {
+      data.department = editDepartment.trim()
+    }
+    updateComputer.mutate(
+      { id: id!, data },
+      {
+        onSuccess: () => {
+          toast.success(t('computers.updated', 'Computador atualizado'))
+          setEditOpen(false)
+        },
+        onError: () => toast.error(t('computers.updateFailed', 'Falha ao atualizar')),
+      }
+    )
+  }
 
   if (isLoading) return <div className="flex items-center justify-center h-64 text-muted-foreground">{t('computerDetail.loading')}</div>
   if (!computer) return <div className="flex items-center justify-center h-64 text-muted-foreground">{t('computerDetail.computerNotFound')}</div>
@@ -617,8 +651,18 @@ export function ComputerDetail() {
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold">{computer.hostname}</h1>
               <Badge variant={computer.status === 'Online' ? 'success' : computer.status === 'Offline' ? 'destructive' : 'warning'}>{computer.status}</Badge>
+              <HasPermission permission="machines.edit">
+                <Button variant="outline" size="sm" onClick={openEdit}>
+                  <Pencil className="h-3.5 w-3.5 mr-1" /> {t('computerDetail.edit', 'Editar')}
+                </Button>
+              </HasPermission>
             </div>
             <p className="text-sm text-muted-foreground">{computer.ipAddress}</p>
+            {computer.department && (
+              <p className="text-sm text-muted-foreground">
+                {t('computerDetail.department')}: <strong className="text-foreground">{computer.department}</strong>
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -719,6 +763,40 @@ export function ComputerDetail() {
           <SecurityTab computerId={id!} computer={computer} />
         </TabsContent>
       </Tabs>
+
+      <Dialog open={editOpen} onClose={() => setEditOpen(false)}>
+        <DialogHeader>
+          <DialogTitle>{t('computerDetail.editTitle', 'Editar computador')}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <Input
+            label={t('computerDetail.name')}
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            placeholder={t('computerDetail.namePlaceholder', 'Nome do computador')}
+          />
+          <div>
+            <Input
+              label={t('computerDetail.department')}
+              value={editDepartment}
+              onChange={(e) => setEditDepartment(e.target.value)}
+              placeholder={t('computerDetail.departmentPlaceholder', 'Departamento...')}
+              list="department-suggestions"
+            />
+            <datalist id="department-suggestions">
+              {departments.map((d) => (
+                <option key={d} value={d} />
+              ))}
+            </datalist>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setEditOpen(false)}>{t('computerDetail.cancel', 'Cancelar')}</Button>
+          <Button onClick={handleSave} disabled={updateComputer.isPending}>
+            {updateComputer.isPending ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> {t('computerDetail.saving', 'Salvando...')}</> : <><Save className="h-4 w-4 mr-1" /> {t('computerDetail.save', 'Salvar')}</>}
+          </Button>
+        </DialogFooter>
+      </Dialog>
     </div>
   )
 }
