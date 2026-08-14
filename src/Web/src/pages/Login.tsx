@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
-import { useAuthStore } from '@/stores/auth'
+import { useAuthStore, normalizeAuthUser } from '@/stores/auth'
+import { apiUrl } from '@/lib/config'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
@@ -20,11 +21,25 @@ export function Login() {
   const [requires2FA, setRequires2FA] = useState(false)
   const [loading, setLoading] = useState(false)
   const [remember, setRemember] = useState(false)
+  const [ssoProviders, setSsoProviders] = useState({ google: false, microsoft: false })
 
-  if (isAuthenticated) {
-    navigate('/', { replace: true })
-    return null
-  }
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/', { replace: true })
+    }
+  }, [isAuthenticated, navigate])
+
+  useEffect(() => {
+    fetch(apiUrl('/api/v1/auth/sso/providers'))
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then((data: { google?: boolean; microsoft?: boolean }) => {
+        setSsoProviders({
+          google: Boolean(data.google),
+          microsoft: Boolean(data.microsoft),
+        })
+      })
+      .catch(() => setSsoProviders({ google: false, microsoft: false }))
+  }, [])
 
   useEffect(() => {
     const error = searchParams.get('error')
@@ -40,12 +55,12 @@ export function Login() {
       if (!data || data.type !== 'SSO_CALLBACK') return
 
       if (data.ok) {
-        const user = data.user as Record<string, unknown>
+        const user = normalizeAuthUser(data.user)
         localStorage.setItem('accessToken', data.accessToken)
         localStorage.setItem('refreshToken', data.refreshToken)
         localStorage.setItem('user', JSON.stringify(user))
         useAuthStore.setState({
-          user: user as never,
+          user,
           accessToken: data.accessToken,
           refreshToken: data.refreshToken,
           isAuthenticated: true,
@@ -68,7 +83,7 @@ export function Login() {
     const left = window.screenX + (window.outerWidth - width) / 2
     const top = window.screenY + (window.outerHeight - height) / 2
     const popup = window.open(
-      `/api/v1/auth/sso/login/${provider}`,
+      apiUrl(`/api/v1/auth/sso/login/${provider}`),
       'sentinelSso',
       `width=${width},height=${height},left=${left},top=${top},popup=1`
     )
@@ -98,6 +113,8 @@ export function Login() {
       setLoading(false)
     }
   }
+
+  if (isAuthenticated) return null
 
   return (
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-background">
@@ -192,7 +209,9 @@ export function Login() {
             </Button>
           </form>
 
+          {(ssoProviders.google || ssoProviders.microsoft) && (
           <div className="grid grid-cols-1 gap-3 mt-6">
+            {ssoProviders.google && (
             <Button type="button" variant="outline" className="w-full" onClick={() => handleSsoLogin('google')}>
               <svg className="h-4 w-4" viewBox="0 0 48 48" fill="none">
                 <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
@@ -202,6 +221,8 @@ export function Login() {
               </svg>
               {t('login.google')}
             </Button>
+            )}
+            {ssoProviders.microsoft && (
             <Button type="button" variant="outline" className="w-full" onClick={() => handleSsoLogin('microsoft')}>
               <svg className="h-4 w-4" viewBox="0 0 23 23" fill="none">
                 <path fill="#F25022" d="M1 1h10v10H1z" />
@@ -211,7 +232,9 @@ export function Login() {
               </svg>
               {t('login.microsoft')}
             </Button>
+            )}
           </div>
+          )}
         </div>
 
         <p className="text-center text-xs text-muted-foreground mt-6">

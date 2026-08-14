@@ -11,6 +11,7 @@ export interface Computer {
   department: string
   agentVersion: string
   uptime: number
+  monitorCount?: number
   tags: string[]
   firewallEnabled?: boolean
   defenderEnabled?: boolean

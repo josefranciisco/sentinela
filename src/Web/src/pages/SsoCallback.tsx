@@ -1,15 +1,16 @@
 import { useEffect } from 'react'
 import { useNavigate, useSearchParams, Navigate } from 'react-router-dom'
-import { useAuthStore } from '@/stores/auth'
+import { useAuthStore, normalizeAuthUser } from '@/stores/auth'
 import { Loader2, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 
 function applySession(accessToken: string, refreshToken: string, user: unknown) {
+  const normalized = normalizeAuthUser(user)
   localStorage.setItem('accessToken', accessToken)
   localStorage.setItem('refreshToken', refreshToken)
-  localStorage.setItem('user', JSON.stringify(user))
+  localStorage.setItem('user', JSON.stringify(normalized))
   useAuthStore.setState({
-    user: user as never,
+    user: normalized,
     accessToken,
     refreshToken,
     isAuthenticated: true,
@@ -35,7 +36,7 @@ export function SsoCallback() {
       payload = { ok: false, error: 'Login externo incompleto. Tente novamente.' }
     } else {
       try {
-        const user = JSON.parse(decodeURIComponent(userParam))
+        const user = normalizeAuthUser(JSON.parse(decodeURIComponent(userParam)))
         payload = { ok: true, accessToken, refreshToken, user }
       } catch {
         payload = { ok: false, error: 'Resposta de login inválida. Tente novamente.' }

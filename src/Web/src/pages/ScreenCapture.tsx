@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
@@ -31,6 +31,7 @@ interface Screenshot {
 interface Computer {
   id: string
   hostname: string
+  monitorCount?: number
 }
 
 export function ScreenCapture() {
@@ -40,7 +41,7 @@ export function ScreenCapture() {
   const [viewCapture, setViewCapture] = useState<Screenshot | null>(null)
   const [selectedComputer, setSelectedComputer] = useState('')
   const [reason, setReason] = useState('')
-  const [captureAllMonitors, setCaptureAllMonitors] = useState(false)
+  const [selectedMonitor, setSelectedMonitor] = useState('0')
   const [search, setSearch] = useState('')
   const [selectedComputerFilter, setSelectedComputerFilter] = useState('')
   const [zoomed, setZoomed] = useState(false)
@@ -57,8 +58,36 @@ export function ScreenCapture() {
       if (selectedComputerFilter) params.set('computerId', selectedComputerFilter)
       return api.get<{ items: Screenshot[]; total: number }>(`/screencapture?${params}`)
     },
-    refetchInterval: 10000,
+    refetchInterval: capturing ? 1000 : 15000,
   })
+
+  const knownIds = useRef<Set<string>>(new Set())
+
+  useEffect(() => {
+    const ids = (screenshots?.items ?? []).map((s) => s.id)
+    if (!capturing) {
+      knownIds.current = new Set(ids)
+      return
+    }
+    if (ids.some((id) => !knownIds.current.has(id))) {
+      setCapturing(false)
+      setProgress(100)
+    }
+  }, [screenshots, capturing])
+
+  useEffect(() => {
+    if (!capturing) return
+    const started = Date.now()
+    const tick = window.setInterval(() => {
+      const elapsed = Date.now() - started
+      setProgress(Math.min(95, Math.round((elapsed / 12000) * 95)))
+      if (elapsed >= 45000) {
+        setCapturing(false)
+        setProgress(100)
+      }
+    }, 300)
+    return () => window.clearInterval(tick)
+  }, [capturing])
 
   const { data: computers } = useQuery({
     queryKey: ['computers'],
@@ -66,28 +95,16 @@ export function ScreenCapture() {
   })
 
   const requestMutation = useMutation({
-    mutationFn: (data: { computerId: string; reason: string; captureAllMonitors: boolean }) =>
+    mutationFn: (data: { computerId: string; reason: string; captureAllMonitors: boolean; monitorIndex?: number }) =>
       api.post('/screencapture/request', data),
     onError: (err: Error) => toast.error(err.message),
     onSuccess: () => {
       setShowRequest(false)
       setSelectedComputer('')
       setReason('')
-      setCaptureAllMonitors(false)
+      setSelectedMonitor('0')
       setCapturing(true)
-      setProgress(0)
-      const interval = setInterval(() => {
-        setProgress((p) => {
-          if (p >= 100) { clearInterval(interval); return 100 }
-          return p + 10
-        })
-      }, 500)
-      setTimeout(() => {
-        clearInterval(interval)
-        setCapturing(false)
-        setProgress(100)
-        queryClient.invalidateQueries({ queryKey: ['screenshots'] })
-      }, 5000)
+      setProgress(8)
     },
   })
 
@@ -125,13 +142,29 @@ export function ScreenCapture() {
 
   const handleRequest = () => {
     if (!selectedComputer) return
-    requestMutation.mutate({ computerId: selectedComputer, reason, captureAllMonitors })
+    const all = selectedMonitor === 'all'
+    requestMutation.mutate({
+      computerId: selectedComputer,
+      reason,
+      captureAllMonitors: all,
+      monitorIndex: all ? undefined : Number(selectedMonitor),
+    })
   }
 
   const computerOptions = (computers?.items ?? []).map((c) => ({
     value: c.id,
     label: c.hostname,
   }))
+
+  const selectedComputerData = (computers?.items ?? []).find((c) => c.id === selectedComputer)
+  const monitorCount = Math.max(1, selectedComputerData?.monitorCount || 1)
+  const monitorOptions = [
+    { value: 'all', label: t('screenCapture.allMonitors', 'Todos os monitores') },
+    ...Array.from({ length: monitorCount }, (_, i) => ({
+      value: String(i),
+      label: t('screenCapture.monitorN', { n: i + 1, defaultValue: `Monitor ${i + 1}` }),
+    })),
+  ]
 
   const filterOptions = [
     { value: '', label: t('screenCapture.allComputers', 'Todos') },
@@ -273,7 +306,10 @@ export function ScreenCapture() {
             <Select
               label={t('screenCapture.computer')}
               value={selectedComputer}
-              onChange={(e) => setSelectedComputer(e.target.value)}
+              onChange={(e) => {
+                setSelectedComputer(e.target.value)
+                setSelectedMonitor('0')
+              }}
               options={computerOptions}
               placeholder={t('screenCapture.computer')}
             />
@@ -283,15 +319,12 @@ export function ScreenCapture() {
               onChange={(e) => setReason(e.target.value)}
               placeholder={t('screenCapture.reasonPlaceholder')}
             />
-            <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <input
-                type="checkbox"
-                checked={captureAllMonitors}
-                onChange={(e) => setCaptureAllMonitors(e.target.checked)}
-                className="rounded border-border"
-              />
-              {t('screenCapture.captureAllMonitors', 'Capturar todos os monitores')}
-            </label>
+            <Select
+              label={t('screenCapture.selectMonitor', 'Monitor')}
+              value={selectedMonitor}
+              onChange={(e) => setSelectedMonitor(e.target.value)}
+              options={monitorOptions}
+            />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowRequest(false)}>{t('screenCapture.cancel')}</Button>

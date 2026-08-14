@@ -4,6 +4,7 @@ import * as signalR from '@microsoft/signalr'
 import { toast } from 'sonner'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/stores/auth'
+import { hubUrl } from '@/lib/config'
 import { useSecurityAlertsStore } from '@/stores/securityAlerts'
 
 const EVENT_LABELS: Record<string, string> = {
@@ -164,10 +165,14 @@ export function RealtimeSecurityAlerts() {
         .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
         .build()
 
-    const monitoring = build('/hubs/monitoring')
-    const alerts = build('/hubs/alerts')
+    const monitoring = build(hubUrl('/hubs/monitoring'))
+    const alerts = build(hubUrl('/hubs/alerts'))
 
     monitoring.on('SecurityEvent', handleEvent)
+    monitoring.on('ScreenshotReady', () => {
+      queryClient.invalidateQueries({ queryKey: ['computer-screenshots'] })
+      queryClient.invalidateQueries({ queryKey: ['screenshots'] })
+    })
     alerts.on('SecurityEvent', handleEvent)
     alerts.on('AlertCreated', handleEvent)
 

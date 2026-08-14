@@ -97,7 +97,7 @@ public static class ServiceCollectionExtensions
         {
             options.AddPolicy("AllowFrontend", builder =>
             {
-                builder.WithOrigins(configuration.GetSection("Cors:Origins").Get<string[]>() ?? new[] { "http://localhost:3000" })
+                builder.SetIsOriginAllowed(origin => IsAllowedCorsOrigin(origin, configuration))
                     .AllowAnyMethod()
                     .AllowAnyHeader()
                     .AllowCredentials();
@@ -144,5 +144,16 @@ public static class ServiceCollectionExtensions
         services.AddHttpContextAccessor();
 
         return services;
+    }
+
+    private static bool IsAllowedCorsOrigin(string? origin, IConfiguration configuration)
+    {
+        if (string.IsNullOrWhiteSpace(origin)) return false;
+        var configured = configuration.GetSection("Cors:Origins").Get<string[]>() ?? [];
+        if (configured.Contains(origin, StringComparer.OrdinalIgnoreCase)) return true;
+        if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri)) return false;
+        var host = uri.Host;
+        return host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+            || host.EndsWith(".vercel.app", StringComparison.OrdinalIgnoreCase);
     }
 }

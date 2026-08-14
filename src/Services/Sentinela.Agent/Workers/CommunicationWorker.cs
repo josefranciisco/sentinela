@@ -96,7 +96,6 @@ public class CommunicationWorker : BackgroundService
             try
             {
                 await SyncPendingDataAsync(stoppingToken);
-                await FetchPendingCommandsAsync(stoppingToken);
             }
             catch (Exception ex)
             {
@@ -156,31 +155,6 @@ public class CommunicationWorker : BackgroundService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to sync pending data");
-        }
-    }
-
-    private async Task FetchPendingCommandsAsync(CancellationToken ct)
-    {
-        try
-        {
-            var commands = await _communication.FetchPendingCommandsAsync(ct);
-            foreach (var cmd in commands)
-            {
-                try
-                {
-                    var result = await _commandService.ExecuteCommandAsync(cmd, ct);
-                    _logger.LogInformation("Fetched command {Id} ({Type}): {Success}",
-                        cmd.CommandId, cmd.CommandType, result.Success);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Failed to execute fetched command {Id}", cmd.CommandId);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to fetch pending commands");
         }
     }
 }

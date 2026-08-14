@@ -19,6 +19,7 @@ public class ScreenCaptureController : ControllerBase
     private readonly ICacheService _cache;
     private readonly IMapper _mapper;
     private readonly IHubContext<AgentHub> _hubContext;
+    private readonly IHubContext<MonitoringHub> _monitoringHub;
     private readonly IWebHostEnvironment _env;
     private readonly ILogger<ScreenCaptureController> _logger;
 
@@ -28,6 +29,7 @@ public class ScreenCaptureController : ControllerBase
         ICacheService cache,
         IMapper mapper,
         IHubContext<AgentHub> hubContext,
+        IHubContext<MonitoringHub> monitoringHub,
         IWebHostEnvironment env,
         ILogger<ScreenCaptureController> logger)
     {
@@ -36,6 +38,7 @@ public class ScreenCaptureController : ControllerBase
         _cache = cache;
         _mapper = mapper;
         _hubContext = hubContext;
+        _monitoringHub = monitoringHub;
         _env = env;
         _logger = logger;
     }
@@ -51,7 +54,8 @@ public class ScreenCaptureController : ControllerBase
         var parameters = JsonSerializer.Serialize(new
         {
             requestId = requestId.ToString(),
-            captureAllMonitors = dto.CaptureAllMonitors
+            captureAllMonitors = dto.CaptureAllMonitors,
+            monitorIndex = dto.MonitorIndex
         });
 
         var command = new
@@ -133,6 +137,16 @@ public class ScreenCaptureController : ControllerBase
         };
 
         await _screenshotRepo.AddAsync(screenshot);
+
+        var payload = new
+        {
+            id = screenshot.Id,
+            computerId,
+            requestId,
+            createdAt = screenshot.CreatedAt
+        };
+        await _monitoringHub.Clients.Group("admins").SendAsync("ScreenshotReady", payload);
+        await _hubContext.Clients.Group("admins").SendAsync("ScreenshotReady", payload);
 
         _logger.LogInformation("Screenshot stored: {Id} for computer {ComputerId}, size={Size}", screenshot.Id, computerId, imageFile.Length);
 

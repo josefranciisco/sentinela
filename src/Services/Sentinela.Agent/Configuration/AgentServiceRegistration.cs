@@ -1,4 +1,6 @@
 using Sentinela.ScreenCapture.Configuration;
+using Sentinela.Agent.Recording;
+using Polly.Extensions.Http;
 
 namespace Sentinela.Agent.Configuration;
 
@@ -16,6 +18,8 @@ public static class AgentServiceRegistration
         services.AddSingleton<ISoftwareCollector, SoftwareCollector>();
         services.AddSingleton<ISecurityCollector, SecurityCollector>();
         services.AddSingleton<ISystemEventCollector, SystemEventCollector>();
+        services.AddSingleton<IRecordingStore, RecordingStore>();
+        services.AddSingleton<RecordingUploadClient>();
         services.AddSingleton<IScreenCaptureService, ScreenCaptureService>();
         
         services.AddSingleton<IAgentHealthService, AgentHealthService>();
@@ -33,6 +37,7 @@ public static class AgentServiceRegistration
         services.AddSingleton<ICryptominerDetector, CryptominerDetector>();
         services.AddSingleton<IRansomwareDetector, RansomwareDetector>();
         
+        services.AddHostedService<ContinuousRecordingWorker>();
         services.AddHostedService<HeartbeatWorker>();
         services.AddHostedService<CollectorWorker>();
         services.AddHostedService<CommunicationWorker>();
@@ -47,6 +52,12 @@ public static class AgentServiceRegistration
             client.Timeout = TimeSpan.FromSeconds(30);
         })
         .AddTransientHttpErrorPolicy(p => p.WaitAndRetryAsync(3, retry => TimeSpan.FromSeconds(Math.Pow(2, retry))));
+
+        services.AddHttpClient("SentinelaApiUpload", client =>
+        {
+            client.BaseAddress = new Uri(configuration["ServerConnection:ApiUrl"] ?? "https://localhost:5001");
+            client.Timeout = TimeSpan.FromMinutes(10);
+        });
         
         services.AddSingleton<IIpcService, IpcService>();
 

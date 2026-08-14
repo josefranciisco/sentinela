@@ -57,7 +57,12 @@ public class AgentHubClient : IAgentHubClient, IAsyncDisposable
                     opts.Headers["X-Api-Key"] = _options.ApiKey;
             })
             .WithAutomaticReconnect(new RetryPolicy())
-            .ConfigureLogging(logging => logging.AddSerilog());
+            .ConfigureLogging(logging =>
+            {
+                logging.ClearProviders();
+                logging.AddSerilog();
+                logging.SetMinimumLevel(LogLevel.Warning);
+            });
 
         _connection = builder.Build();
 
@@ -81,7 +86,8 @@ public class AgentHubClient : IAgentHubClient, IAsyncDisposable
 
         _connection.On<string>("ExecuteCommand", async (commandJson) =>
         {
-            var cmd = System.Text.Json.JsonSerializer.Deserialize<CommandData>(commandJson);
+            var cmd = System.Text.Json.JsonSerializer.Deserialize<CommandData>(commandJson,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
             if (cmd != null)
                 CommandReceived?.Invoke(this, new CommandReceivedEventArgs(cmd));
             await Task.CompletedTask;
@@ -122,6 +128,12 @@ public class AgentHubClient : IAgentHubClient, IAsyncDisposable
             _logger.LogWarning(error, "Connection closed");
             await Task.Delay(_options.ReconnectDelayMs, _reconnectCts.Token);
             if (!_disposed) await ConnectAsync(ct);
+        };
+
+        _connection.Reconnected += async (connectionId) =>
+        {
+            _logger.LogInformation("SignalR reconnected: {ConnectionId}", connectionId);
+            await Task.CompletedTask;
         };
 
         await _connection.StartAsync(ct);

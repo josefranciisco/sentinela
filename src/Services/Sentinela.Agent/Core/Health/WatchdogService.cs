@@ -25,7 +25,6 @@ public class WatchdogService : IWatchdogService, IDisposable
     private readonly Dictionary<string, DateTime> _collectorLastRun = new();
     private readonly object _lock = new();
     private int _missedHeartbeats;
-    private DateTime _lastHeartbeatTime;
     private const int MaxMissedHeartbeats = 3;
     
     public event EventHandler? ConfigurationChanged;
@@ -37,7 +36,6 @@ public class WatchdogService : IWatchdogService, IDisposable
         _state = state;
         _options = options.Value;
         _logger = logger;
-        _lastHeartbeatTime = DateTime.UtcNow;
         
         try
         {
@@ -86,26 +84,21 @@ public class WatchdogService : IWatchdogService, IDisposable
     
     private bool CheckMissedHeartbeats()
     {
-        var now = DateTime.UtcNow;
-        if (_state.LastHeartbeat != DateTime.MinValue)
+        var last = _state.LastSuccessfulCommunication != default
+            ? _state.LastSuccessfulCommunication
+            : _state.LastHeartbeat;
+        if (last == DateTime.MinValue || last == default)
+            return false;
+
+        var intervalSec = Math.Max(1, _options.HeartbeatIntervalMs / 1000.0);
+        var elapsed = (DateTime.UtcNow - last).TotalSeconds;
+        if (elapsed > intervalSec * 3)
         {
-            var elapsed = now - _lastHeartbeatTime;
-            if (elapsed.TotalSeconds > _options.HeartbeatIntervalMs / 1000.0 * 2)
-            {
-                _missedHeartbeats++;
-                _lastHeartbeatTime = now;
-                
-                if (_missedHeartbeats >= MaxMissedHeartbeats)
-                {
-                    return true;
-                }
-            }
-            else
-            {
-                _missedHeartbeats = 0;
-                _lastHeartbeatTime = _state.LastHeartbeat;
-            }
+            _missedHeartbeats++;
+            return _missedHeartbeats >= MaxMissedHeartbeats;
         }
+
+        _missedHeartbeats = 0;
         return false;
     }
     
@@ -116,14 +109,16 @@ public class WatchdogService : IWatchdogService, IDisposable
             _logger.LogWarning("Attempting agent restart");
             
             var process = Process.GetCurrentProcess();
+            var exe = process.MainModule?.FileName ?? Environment.ProcessPath ?? "";
             var startInfo = new ProcessStartInfo
             {
-                FileName = process.MainModule?.FileName ?? "",
-                Arguments = Environment.CommandLine,
-                UseShellExecute = true,
-                Verb = "runas"
+                FileName = exe,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden,
+                WorkingDirectory = Path.GetDirectoryName(exe) ?? Environment.CurrentDirectory
             };
-            
+
             Process.Start(startInfo);
             
             var shutdownTimeout = TimeSpan.FromSeconds(5);

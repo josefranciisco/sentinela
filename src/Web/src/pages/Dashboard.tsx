@@ -42,6 +42,9 @@ const eventTypeTranslations: Record<string, string> = {
   'FileCopy': 'Cópia de Arquivo',
   'SoftwareInstalled': 'Software Instalado',
   'SoftwareUninstalled': 'Software Desinstalado',
+  'AppFocus': 'Troca de aplicativo',
+  'AppStarted': 'Aplicativo iniciado',
+  'AppClosed': 'Aplicativo fechado',
   'SuspiciousNetworkActivity': 'Atividade de Rede Suspeita',
 }
 

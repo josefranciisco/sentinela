@@ -9,36 +9,42 @@ namespace Sentinela.ScreenCapture.Capture;
 public class CaptureService : ICaptureService
 {
     private readonly ILogger<CaptureService> _logger;
-    private readonly List<MonitorInfo> _monitors;
 
     public CaptureService(ILogger<CaptureService> logger)
     {
         _logger = logger;
-        _monitors = EnumerateMonitors();
     }
 
-    public IReadOnlyList<MonitorInfo> GetMonitors() => _monitors.AsReadOnly();
+    public IReadOnlyList<MonitorInfo> GetMonitors() => EnumerateMonitors().AsReadOnly();
 
     public Task<CaptureResult> CaptureAsync(CaptureOptions options, CancellationToken ct = default)
     {
         var sw = Stopwatch.StartNew();
+        var monitors = EnumerateMonitors();
 
-        if (options.CaptureAllMonitors || _monitors.Count == 0)
+        if (options.CaptureAllMonitors || monitors.Count == 0)
         {
-            var rect = BoundingRectFromMonitors();
+            var rect = BoundingRectFromMonitors(monitors);
             var (data, w, h) = CaptureGdi(rect.X, rect.Y, rect.Width, rect.Height);
-            var monitorLabel = $"{_monitors.Count} Monitores";
+            var monitorLabel = monitors.Count <= 1
+                ? (monitors.FirstOrDefault()?.Name ?? "Primary")
+                : $"{monitors.Count} Monitores";
             sw.Stop();
             return Task.FromResult(new CaptureResult(data, w, h, monitorLabel, sw.ElapsedMilliseconds));
         }
 
-        var monitor = options.MonitorIndex.HasValue && options.MonitorIndex >= 0 && options.MonitorIndex < _monitors.Count
-            ? _monitors[options.MonitorIndex.Value]
-            : _monitors.FirstOrDefault(m => m.IsPrimary) ?? _monitors[0];
+        var index = options.MonitorIndex;
+        var monitor = index.HasValue && index >= 0 && index < monitors.Count
+            ? monitors[index.Value]
+            : monitors.FirstOrDefault(m => m.IsPrimary) ?? monitors[0];
+        var labelIndex = monitors.IndexOf(monitor);
+        var label = labelIndex >= 0
+            ? $"Monitor {labelIndex + 1}{(monitor.IsPrimary ? " (principal)" : "")}"
+            : monitor.Name;
 
         var (imgData, width, height) = CaptureGdi(monitor.X, monitor.Y, monitor.Width, monitor.Height);
         sw.Stop();
-        return Task.FromResult(new CaptureResult(imgData, width, height, monitor.Name, sw.ElapsedMilliseconds));
+        return Task.FromResult(new CaptureResult(imgData, width, height, label, sw.ElapsedMilliseconds));
     }
 
     private static (byte[] data, int width, int height) CaptureGdi(int x, int y, int width, int height)
@@ -46,53 +52,21 @@ public class CaptureService : ICaptureService
         using var bitmap = new System.Drawing.Bitmap(width, height);
         using var graphics = System.Drawing.Graphics.FromImage(bitmap);
         graphics.CopyFromScreen(x, y, 0, 0, new System.Drawing.Size(width, height));
-        var (cropX, cropY, cropW, cropH) = FindContentBounds(bitmap, 15);
-        if (cropW > 0 && cropH > 0 && (cropX > 0 || cropY > 0 || cropW < width || cropH < height))
-        {
-            using var cropped = bitmap.Clone(new System.Drawing.Rectangle(cropX, cropY, cropW, cropH), bitmap.PixelFormat);
-            using var ms = new MemoryStream();
-            cropped.Save(ms, ImageFormat.Png);
-            return (ms.ToArray(), cropW, cropH);
-        }
-        using var ms2 = new MemoryStream();
-        bitmap.Save(ms2, ImageFormat.Png);
-        return (ms2.ToArray(), width, height);
+        using var ms = new MemoryStream();
+        bitmap.Save(ms, ImageFormat.Jpeg);
+        return (ms.ToArray(), width, height);
     }
 
-    private static (int x, int y, int w, int h) FindContentBounds(Bitmap bmp, byte threshold)
-    {
-        var w = bmp.Width;
-        var h = bmp.Height;
-        int left = w, right = -1, top = h, bottom = -1;
-
-        for (var y = 0; y < h; y++)
-        {
-            for (var x = 0; x < w; x++)
-            {
-                var p = bmp.GetPixel(x, y);
-                if (p.R > threshold || p.G > threshold || p.B > threshold)
-                {
-                    if (x < left) left = x;
-                    if (x > right) right = x;
-                    if (y < top) top = y;
-                    if (y > bottom) bottom = y;
-                }
-            }
-        }
-
-        if (right < 0) return (0, 0, w, h);
-        return (left, top, right - left + 1, bottom - top + 1);
-    }
-
-    private static MonitorRect BoundingRectFromMonitors()
+    private static MonitorRect BoundingRectFromMonitors(IReadOnlyList<MonitorInfo> monitors)
     {
         var minX = int.MaxValue; var minY = int.MaxValue;
         var maxX = int.MinValue; var maxY = int.MinValue;
-        foreach (var m in EnumerateMonitors())
+        foreach (var m in monitors)
         {
             minX = Math.Min(minX, m.X); minY = Math.Min(minY, m.Y);
             maxX = Math.Max(maxX, m.X + m.Width); maxY = Math.Max(maxY, m.Y + m.Height);
         }
+        if (minX == int.MaxValue) return new MonitorRect(0, 0, 1920, 1080);
         return new MonitorRect(minX, minY, maxX - minX, maxY - minY);
     }
 
@@ -113,7 +87,8 @@ public class CaptureService : ICaptureService
                         var isPrimary = (mi.dwFlags & 1) != 0;
                         var scale = GetDpiForMonitor(hMonitor);
                         monitors.Add(new MonitorInfo(name,
-                            rect.Width, rect.Height, rect.X, rect.Y,
+                            rect.Right - rect.Left, rect.Bottom - rect.Top,
+                            rect.Left, rect.Top,
                             scale, isPrimary));
                     }
                     return true;
@@ -145,7 +120,7 @@ public class CaptureService : ICaptureService
     private record MonitorRect(int X, int Y, int Width, int Height);
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct RECT { public int X, Y, Width, Height; }
+    private struct RECT { public int Left, Top, Right, Bottom; }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
     private struct MONITORINFOEX

@@ -92,7 +92,7 @@ public class SsoService : ISsoService
                 throw new InvalidOperationException("Falha ao criar usuário a partir do login externo.");
             }
 
-            await _userManager.AddToRoleAsync(user, "Operator");
+            await EnsureIdentityOperatorAsync(user);
             await EnsureSentinelaRoleAsync(user.Id, operatorRoleName: "Operador");
             _logger.LogInformation("Local user created from SSO provider {Provider} for {Email}", provider, ssoUser.Email);
         }
@@ -103,36 +103,49 @@ public class SsoService : ISsoService
             user.FullName = string.IsNullOrWhiteSpace(user.FullName) ? ssoUser.DisplayName : user.FullName;
             user.UpdatedAt = DateTimeOffset.UtcNow;
             await _userManager.UpdateAsync(user);
+            await EnsureIdentityOperatorAsync(user);
             await EnsureSentinelaRoleAsync(user.Id, operatorRoleName: "Operador");
         }
 
         return await _authService.LoginExternalAsync(user.Id, deviceInfo, ipAddress);
     }
 
+    private async Task EnsureIdentityOperatorAsync(ApplicationUser user)
+    {
+        if (!await _userManager.IsInRoleAsync(user, "Operator"))
+        {
+            var result = await _userManager.AddToRoleAsync(user, "Operator");
+            if (!result.Succeeded)
+            {
+                _logger.LogWarning("Failed to assign Identity role Operator to {UserId}: {Errors}",
+                    user.Id, string.Join("; ", result.Errors.Select(e => e.Description)));
+            }
+        }
+    }
+
     private async Task EnsureSentinelaRoleAsync(Guid userId, string operatorRoleName)
     {
-        var hasRole = await _sentinelaContext.UserRoles
-            .Where(ur => ur.UserId == userId && ur.TenantId == DefaultTenantId && !ur.IsDeleted)
-            .AnyAsync();
-
-        if (hasRole)
-            return;
-
         var roleId = await _sentinelaContext.Roles
             .Where(r => r.TenantId == DefaultTenantId && r.Name == operatorRoleName && !r.IsDeleted)
             .Select(r => r.Id)
             .FirstOrDefaultAsync();
 
-        if (roleId != Guid.Empty)
-        {
-            _sentinelaContext.UserRoles.Add(new UserRole(userId, roleId) { TenantId = DefaultTenantId });
-            await _sentinelaContext.SaveChangesAsync();
-            _logger.LogInformation("Sentinela role '{Role}' assigned to SSO user {UserId}", operatorRoleName, userId);
-        }
-        else
+        if (roleId == Guid.Empty)
         {
             _logger.LogWarning("Sentinela role '{Role}' not found for tenant {TenantId}", operatorRoleName, DefaultTenantId);
+            return;
         }
+
+        var hasOperatorRole = await _sentinelaContext.UserRoles
+            .Where(ur => ur.UserId == userId && ur.RoleId == roleId && ur.TenantId == DefaultTenantId && !ur.IsDeleted)
+            .AnyAsync();
+
+        if (hasOperatorRole)
+            return;
+
+        _sentinelaContext.UserRoles.Add(new UserRole(userId, roleId) { TenantId = DefaultTenantId });
+        await _sentinelaContext.SaveChangesAsync();
+        _logger.LogInformation("Sentinela role '{Role}' assigned to SSO user {UserId}", operatorRoleName, userId);
     }
 
     public string BuildRedirectUri(string provider) => $"{_ssoConfig.FrontendBaseUrl.TrimEnd('/')}/api/v1/auth/sso/callback/{provider}";

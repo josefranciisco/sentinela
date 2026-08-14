@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -6,17 +6,95 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@/components/ui/table'
 import { Dialog, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { HasPermission } from '@/components/HasPermission'
 import { api } from '@/lib/api'
+import { apiUrl } from '@/lib/config'
 import { useComputer, useComputerTimeline, useDepartments, useUpdateComputer } from '@/hooks/useComputers'
 import { useLiveRelativeTime } from '@/hooks/useLiveRelativeTime'
 import { formatDate, formatRelative, formatDuration } from '@/lib/utils'
-import { ArrowLeft, Monitor, Clock, Shield, Camera, Radio, Download, Search, Eye, Trash2, Loader2, Maximize2, X, AlertTriangle, User, Package, RefreshCw, Pencil, Save } from 'lucide-react'
+import { ArrowLeft, Monitor, Clock, Shield, Camera, Radio, Download, Search, Eye, Trash2, Loader2, Maximize2, X, AlertTriangle, User, Package, RefreshCw, Pencil, Save, Video, Cpu } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth'
+import { RecordingTab } from '@/pages/RecordingTab'
+
+function HardwareInventoryTab({ hostname }: { hostname: string }) {
+  const { t } = useTranslation()
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['monitoramento-machine', hostname],
+    queryFn: () => api.get<any>(`/monitoramento/machines/${encodeURIComponent(hostname)}`),
+    enabled: !!hostname,
+  })
+  const inv = data?.inventory
+  if (isLoading) {
+    return <p className="text-sm text-muted-foreground py-8"><Loader2 className="h-4 w-4 animate-spin inline mr-1" /> {t('common.loading')}</p>
+  }
+  if (isError || !inv) {
+    return (
+      <Card>
+        <CardContent className="py-8 text-sm text-muted-foreground">
+          {t('computerDetail.inventoryMissing', 'Inventário de hardware ainda não chegou do monitoramento para este hostname.')}
+        </CardContent>
+      </Card>
+    )
+  }
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      <Card>
+        <CardHeader><CardTitle className="text-base">Sistema</CardTitle></CardHeader>
+        <CardContent className="text-sm space-y-1">
+          <p>{inv.system?.edition || '—'} · {inv.system?.version || '—'}</p>
+          <p className="text-muted-foreground">Serial: {inv.system?.serial || '—'}</p>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle className="text-base">CPU</CardTitle></CardHeader>
+        <CardContent className="text-sm space-y-1">
+          <p>{inv.cpu?.model || '—'}</p>
+          <p className="text-muted-foreground">{inv.cpu?.cores || '—'} núcleos · {inv.cpu?.threads || '—'} threads · {inv.cpu?.clock_mhz || '—'} MHz</p>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle className="text-base">Memória</CardTitle></CardHeader>
+        <CardContent className="text-sm space-y-2">
+          <p>{inv.memory?.total_gb ?? '—'} GB · {inv.memory?.slots_free ?? '—'} slots livres de {inv.memory?.slots_total ?? '—'}</p>
+          {(inv.memory?.modules || []).map((mod: any, i: number) => (
+            <p key={i} className="text-muted-foreground text-xs">{mod.slot}: {mod.size_gb} GB {mod.type} {mod.speed_mhz} MHz · {mod.manufacturer}</p>
+          ))}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle className="text-base">Armazenamento</CardTitle></CardHeader>
+        <CardContent className="text-sm space-y-1">
+          {(inv.storage?.disks || []).map((d: any, i: number) => (
+            <p key={i}>{d.type} · {d.model} · {d.capacity_gb} GB</p>
+          ))}
+          <p className="text-muted-foreground">Livre: {inv.storage?.free_gb ?? '—'} GB</p>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle className="text-base">Monitores</CardTitle></CardHeader>
+        <CardContent className="text-sm space-y-1">
+          {(inv.monitors || []).map((mon: any, i: number) => (
+            <p key={i}>{mon.primary ? '★ ' : ''}{mon.model} {mon.resolution ? `· ${mon.resolution}` : ''}</p>
+          ))}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle className="text-base">GPU / Rede</CardTitle></CardHeader>
+        <CardContent className="text-sm space-y-1">
+          {(inv.gpu || []).map((g: any, i: number) => (
+            <p key={i}>{g.model} · {g.vram_gb} GB</p>
+          ))}
+          <p className="text-muted-foreground">{inv.network?.ip} · {inv.network?.mac}</p>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
 
 function FileTransfersTab({ computerId }: { computerId: string }) {
   const { t } = useTranslation()
@@ -88,12 +166,12 @@ function FileTransfersTab({ computerId }: { computerId: string }) {
   )
 }
 
-function ScreenshotsTab({ computerId }: { computerId: string }) {
+function ScreenshotsTab({ computerId, monitorCount = 1, hostname }: { computerId: string; monitorCount?: number; hostname?: string }) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [showRequest, setShowRequest] = useState(false)
   const [reason, setReason] = useState('')
-  const [captureAllMonitors, setCaptureAllMonitors] = useState(false)
+  const [selectedMonitor, setSelectedMonitor] = useState('0')
   const [capturing, setCapturing] = useState(false)
   const [progress, setProgress] = useState(0)
   const [viewCapture, setViewCapture] = useState<any | null>(null)
@@ -104,32 +182,66 @@ function ScreenshotsTab({ computerId }: { computerId: string }) {
   const { data: screenshots, isLoading } = useQuery({
     queryKey: ['computer-screenshots', computerId],
     queryFn: () => api.get<{ items: any[] }>(`/screencapture?computerId=${computerId}&pageSize=20`),
-    refetchInterval: capturing ? 3000 : false,
+    refetchInterval: capturing ? 1000 : false,
   })
 
+  const knownIds = useRef<Set<string>>(new Set())
+
+  useEffect(() => {
+    const ids = (screenshots?.items || []).map((s: any) => s.id as string)
+    if (!capturing) {
+      knownIds.current = new Set(ids)
+      return
+    }
+    if (ids.some((id) => !knownIds.current.has(id))) {
+      setCapturing(false)
+      setProgress(100)
+    }
+  }, [screenshots, capturing])
+
+  useEffect(() => {
+    if (!capturing) return
+    const started = Date.now()
+    const tick = window.setInterval(() => {
+      const elapsed = Date.now() - started
+      setProgress(Math.min(95, Math.round((elapsed / 12000) * 95)))
+      if (elapsed >= 45000) {
+        setCapturing(false)
+        setProgress(100)
+      }
+    }, 300)
+    return () => window.clearInterval(tick)
+  }, [capturing])
+
+  const { data: fleet } = useQuery({
+    queryKey: ['monitoramento-machine', hostname],
+    queryFn: () => api.get<any>(`/monitoramento/machines/${encodeURIComponent(hostname!)}`),
+    enabled: !!hostname,
+  })
+
+  const invMonitors = fleet?.inventory?.monitors || []
+  const count = Math.max(1, monitorCount || 0, invMonitors.length || 0)
+  const monitorOptions = [
+    { value: 'all', label: t('screenCapture.allMonitors', 'Todos os monitores') },
+    ...Array.from({ length: count }, (_, i) => {
+      const model = invMonitors[i]?.model
+      const primary = invMonitors[i]?.primary
+      const base = t('screenCapture.monitorN', { n: i + 1, defaultValue: `Monitor ${i + 1}` })
+      const extra = [model, primary ? t('screenCapture.primaryMonitor', 'Principal') : ''].filter(Boolean).join(' · ')
+      return { value: String(i), label: extra ? `${base} · ${extra}` : base }
+    }),
+  ]
+
   const requestMutation = useMutation({
-    mutationFn: (data: { computerId: string; reason: string; captureAllMonitors: boolean }) =>
+    mutationFn: (data: { computerId: string; reason: string; captureAllMonitors: boolean; monitorIndex?: number }) =>
       api.post('/screencapture/request', data),
     onError: (err: Error) => toast.error(err.message),
     onSuccess: () => {
       setShowRequest(false)
       setReason('')
-      setCaptureAllMonitors(false)
+      setSelectedMonitor('0')
       setCapturing(true)
-      setProgress(0)
-      const interval = setInterval(() => {
-        setProgress((p) => {
-          if (p >= 100) { clearInterval(interval); return 100 }
-          return p + 10
-        })
-      }, 500)
-      setTimeout(() => {
-        clearInterval(interval)
-        setCapturing(false)
-        setProgress(100)
-        queryClient.invalidateQueries({ queryKey: ['computer-screenshots', computerId] })
-        setTimeout(() => queryClient.invalidateQueries({ queryKey: ['computer-screenshots', computerId] }), 3000)
-      }, 10000)
+      setProgress(8)
     },
   })
 
@@ -145,7 +257,13 @@ function ScreenshotsTab({ computerId }: { computerId: string }) {
   })
 
   const handleRequest = () => {
-    requestMutation.mutate({ computerId, reason, captureAllMonitors })
+    const all = selectedMonitor === 'all'
+    requestMutation.mutate({
+      computerId,
+      reason,
+      captureAllMonitors: all,
+      monitorIndex: all ? undefined : Number(selectedMonitor),
+    })
   }
 
   const handleDownload = async (screenshot: any) => {
@@ -222,9 +340,9 @@ function ScreenshotsTab({ computerId }: { computerId: string }) {
               <div className="p-2">
                 <p className="text-[10px] text-muted-foreground truncate">{formatDate(s.createdAt)}</p>
                 <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-                  {s.monitorName && /monitores\b/i.test(s.monitorName) ? (
+                  {s.monitorName && (
                     <Badge variant="secondary" className="text-[9px] px-1 py-0">{s.monitorName}</Badge>
-                  ) : null}
+                  )}
                   <Badge variant="outline" className="text-[9px] px-1 py-0">{s.width}x{s.height}</Badge>
                   {s.size && <Badge variant="outline" className="text-[9px] px-1 py-0">{formatSize(s.size)}</Badge>}
                 </div>
@@ -347,15 +465,12 @@ function ScreenshotsTab({ computerId }: { computerId: string }) {
               onChange={(e) => setReason(e.target.value)}
               placeholder={t('screenCapture.reasonPlaceholder', 'Motivo da captura...')}
             />
-            <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <input
-                type="checkbox"
-                checked={captureAllMonitors}
-                onChange={(e) => setCaptureAllMonitors(e.target.checked)}
-                className="rounded border-border"
-              />
-              {t('screenCapture.captureAllMonitors', 'Capturar todos os monitores')}
-            </label>
+            <Select
+              label={t('screenCapture.selectMonitor', 'Monitor')}
+              value={selectedMonitor}
+              onChange={(e) => setSelectedMonitor(e.target.value)}
+              options={monitorOptions}
+            />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowRequest(false)}>{t('screenCapture.cancel', 'Cancelar')}</Button>
@@ -672,7 +787,9 @@ export function ComputerDetail() {
           <TabsTrigger value="timeline"><Clock className="h-4 w-4 mr-1" /> {t('computerDetail.timeline')}</TabsTrigger>
           <TabsTrigger value="fileTransfers"><Download className="h-4 w-4 mr-1" /> {t('computerDetail.fileTransfers', 'Transferências')}</TabsTrigger>
           <TabsTrigger value="screenshots"><Camera className="h-4 w-4 mr-1" /> {t('computerDetail.screenshots')}</TabsTrigger>
+          <TabsTrigger value="recording"><Video className="h-4 w-4 mr-1" /> {t('computerDetail.recording')}</TabsTrigger>
           <TabsTrigger value="remote"><Radio className="h-4 w-4 mr-1" /> {t('computerDetail.remote')}</TabsTrigger>
+          <TabsTrigger value="inventory"><Cpu className="h-4 w-4 mr-1" /> {t('computerDetail.inventory', 'Inventário')}</TabsTrigger>
           <TabsTrigger value="security"><Shield className="h-4 w-4 mr-1" /> {t('computerDetail.security')}</TabsTrigger>
         </TabsList>
 
@@ -724,7 +841,11 @@ export function ComputerDetail() {
         </TabsContent>
 
         <TabsContent value="screenshots">
-          <ScreenshotsTab computerId={id!} />
+          <ScreenshotsTab computerId={id!} monitorCount={computer.monitorCount} hostname={computer.hostname} />
+        </TabsContent>
+
+        <TabsContent value="recording">
+          <RecordingTab computerId={id!} online={computer.status === 'Online'} monitorCount={computer.monitorCount} />
         </TabsContent>
 
         <TabsContent value="remote">
@@ -741,7 +862,7 @@ export function ComputerDetail() {
               <p className="text-sm text-muted-foreground mb-4">{t('remoteAssistance.subtitle')}</p>
               <Button onClick={() => {
                 const token = useAuthStore.getState().accessToken
-                fetch('/api/v1/remote/request', {
+                fetch(apiUrl('/api/v1/remote/request'), {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                   body: JSON.stringify({ computerId: id, sessionType: 'view' })
@@ -761,6 +882,10 @@ export function ComputerDetail() {
 
         <TabsContent value="security">
           <SecurityTab computerId={id!} computer={computer} />
+        </TabsContent>
+
+        <TabsContent value="inventory">
+          <HardwareInventoryTab hostname={computer.hostname} />
         </TabsContent>
       </Tabs>
 

@@ -19,6 +19,11 @@ try
         .Enrich.FromLogContext()
         .WriteTo.Console());
 
+    builder.WebHost.ConfigureKestrel(options =>
+    {
+        options.Limits.MaxRequestBodySize = 2_147_483_647;
+    });
+
     builder.Services.AddApiServices(builder.Configuration);
     builder.Services.AddPersistenceServices(builder.Configuration);
     builder.Services.AddMessageBus(builder.Configuration);

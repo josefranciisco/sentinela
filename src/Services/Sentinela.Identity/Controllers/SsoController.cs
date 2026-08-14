@@ -20,6 +20,16 @@ public class SsoController : ControllerBase
         _logger = logger;
     }
 
+    [HttpGet("providers")]
+    public IActionResult Providers()
+    {
+        return Ok(new
+        {
+            google = _ssoService.IsSsoEnabled("google"),
+            microsoft = _ssoService.IsSsoEnabled("microsoft"),
+        });
+    }
+
     [HttpGet("login/{provider}")]
     public IActionResult Login(string provider)
     {
@@ -73,7 +83,10 @@ public class SsoController : ControllerBase
             var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
             var response = await _ssoService.HandleSsoCallbackAsync(provider, code, deviceInfo, ipAddress);
 
-            var userJson = System.Text.Json.JsonSerializer.Serialize(response.User);
+            var userJson = System.Text.Json.JsonSerializer.Serialize(response.User, new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+            });
             var redirectUrl = $"{_ssoConfig.FrontendBaseUrl.TrimEnd('/')}/sso-callback" +
                 $"?accessToken={Uri.EscapeDataString(response.AccessToken)}" +
                 $"&refreshToken={Uri.EscapeDataString(response.RefreshToken)}" +

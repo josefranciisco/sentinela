@@ -1,6 +1,7 @@
 import { useAuthStore } from '@/stores/auth'
+import { apiUrl } from '@/lib/config'
 
-const BASE_URL = '/api/v1'
+const BASE_URL = apiUrl('/api/v1')
 
 let isRefreshing = false
 let failedQueue: Array<{ resolve: (token: string) => void; reject: (err: unknown) => void }> = []

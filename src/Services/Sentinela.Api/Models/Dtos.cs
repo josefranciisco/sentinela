@@ -279,6 +279,7 @@ public class ScreenCaptureRequestDto
     public Guid ComputerId { get; set; }
     public string Reason { get; set; } = string.Empty;
     public bool CaptureAllMonitors { get; set; }
+    public int? MonitorIndex { get; set; }
 }
 
 public class ScreenshotDto
@@ -554,6 +555,13 @@ public class AgentHeartbeatDto
     public string CurrentUser { get; set; } = string.Empty;
     public int MonitorCount { get; set; } = 1;
     public Guid? TenantId { get; set; }
+    public bool RecordingEnabled { get; set; }
+    public DateTime? RecordingFromUtc { get; set; }
+    public DateTime? RecordingToUtc { get; set; }
+    public long RecordingBytes { get; set; }
+    public bool RecordingInSchedule { get; set; } = true;
+    public string? RecordingScheduleSummary { get; set; }
+    public long RecordingMaxBytes { get; set; }
 }
 
 public class ScreenCaptureDataDto

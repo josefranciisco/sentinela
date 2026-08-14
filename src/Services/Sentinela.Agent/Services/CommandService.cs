@@ -3,6 +3,7 @@ using System.Management;
 using System.Text;
 using System.Text.Json;
 using Sentinela.Agent.Core.Collectors;
+using Sentinela.Agent.Recording;
 using Sentinela.ScreenCapture.DTOs;
 using Sentinela.ScreenCapture.Services;
 
@@ -31,6 +32,8 @@ public class CommandService : ICommandService
     private readonly IScreenCaptureOrchestrator _orchestrator;
     private readonly ISoftwareCollector _softwareCollector;
     private readonly ISecurityCollector _securityCollector;
+    private readonly IRecordingStore _recordingStore;
+    private readonly RecordingUploadClient _recordingUpload;
 
     public CommandService(
         ILogger<CommandService> logger,
@@ -39,7 +42,9 @@ public class CommandService : ICommandService
         ICommunicationService communicationService,
         IScreenCaptureOrchestrator orchestrator,
         ISoftwareCollector softwareCollector,
-        ISecurityCollector securityCollector)
+        ISecurityCollector securityCollector,
+        IRecordingStore recordingStore,
+        RecordingUploadClient recordingUpload)
     {
         _logger = logger;
         _state = state;
@@ -48,6 +53,8 @@ public class CommandService : ICommandService
         _orchestrator = orchestrator;
         _softwareCollector = softwareCollector;
         _securityCollector = securityCollector;
+        _recordingStore = recordingStore;
+        _recordingUpload = recordingUpload;
     }
 
     public async Task<CommandResult> ExecuteCommandAsync(CommandData command, CancellationToken ct = default)
@@ -68,6 +75,9 @@ public class CommandService : ICommandService
             "transferfile" => await HandleTransferFileAsync(command.Parameters),
             "capturescreen" => await HandleCaptureScreenAsync(command.Parameters),
             "syncinventory" or "refreshsecurity" or "syncsecurity" => await HandleSyncInventoryAsync(ct),
+            "listrecording" => await HandleListRecordingAsync(command.Parameters, ct),
+            "getrecordingframe" => await HandleGetRecordingFrameAsync(command.Parameters, ct),
+            "exportrecording" => await HandleExportRecordingAsync(command.Parameters, ct),
             _ => new CommandResult { Success = false, Output = $"Unknown command type: {command.CommandType}" }
         };
     }
@@ -337,16 +347,26 @@ public class CommandService : ICommandService
         {
             string requestId;
             bool captureAllMonitors = false;
+            int? monitorIndex = null;
             try
             {
-                using var doc = JsonDocument.Parse(parameters);
-                requestId = doc.RootElement.GetProperty("requestId").GetString() ?? parameters;
-                captureAllMonitors = doc.RootElement.GetProperty("captureAllMonitors").GetBoolean();
+                using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(parameters) ? "{}" : parameters);
+                requestId = doc.RootElement.TryGetProperty("requestId", out var rid)
+                    ? rid.GetString() ?? parameters
+                    : parameters;
+                if (doc.RootElement.TryGetProperty("captureAllMonitors", out var allEl)
+                    && (allEl.ValueKind is JsonValueKind.True or JsonValueKind.False))
+                    captureAllMonitors = allEl.GetBoolean();
+                if (doc.RootElement.TryGetProperty("monitorIndex", out var idxEl) && idxEl.TryGetInt32(out var idx))
+                    monitorIndex = idx;
             }
             catch
             {
                 requestId = parameters;
             }
+
+            if (monitorIndex.HasValue)
+                captureAllMonitors = false;
 
             var cmd = new CaptureCommandDto
             {
@@ -354,7 +374,8 @@ public class CommandService : ICommandService
                 ComputerId = _state.ComputerId,
                 RequestId = requestId,
                 Quality = 100,
-                CaptureAllMonitors = captureAllMonitors
+                CaptureAllMonitors = captureAllMonitors,
+                MonitorIndex = monitorIndex
             };
 
             var result = await _orchestrator.ExecuteCaptureAsync(cmd);
@@ -373,6 +394,113 @@ public class CommandService : ICommandService
             _logger.LogError(ex, "Failed to handle screen capture command");
             return new CommandResult { Success = false, Output = ex.Message };
         }
+    }
+
+    private async Task<CommandResult> HandleListRecordingAsync(string parameters, CancellationToken ct)
+    {
+        try
+        {
+            var status = _recordingStore.GetStatus();
+            await _recordingUpload.PostStatusAsync(ResolveServerComputerId(parameters), status, ct);
+            return new CommandResult { Success = true, Output = $"segments={status.SegmentCount}" };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to list recording");
+            return new CommandResult { Success = false, Output = ex.Message };
+        }
+    }
+
+    private async Task<CommandResult> HandleGetRecordingFrameAsync(string parameters, CancellationToken ct)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(parameters) ? "{}" : parameters);
+            var requestId = doc.RootElement.TryGetProperty("requestId", out var rid) ? rid.GetString() : Guid.NewGuid().ToString();
+            var at = doc.RootElement.TryGetProperty("at", out var atEl) && atEl.TryGetDateTime(out var parsed)
+                ? DateTime.SpecifyKind(parsed, DateTimeKind.Utc)
+                : DateTime.UtcNow;
+            var monitorIndex = ReadInt(doc.RootElement, "monitorIndex", 0);
+
+            var jpeg = _recordingStore.GetFrame(at, monitorIndex);
+            if (jpeg is null || jpeg.Length == 0)
+            {
+                _logger.LogWarning("No recording frame at {At} monitor {Monitor}", at, monitorIndex);
+                return new CommandResult { Success = false, Output = "No recording frame for that time" };
+            }
+
+            await _recordingUpload.PostFrameAsync(requestId!, ResolveServerComputerId(parameters), at, jpeg, ct);
+            return new CommandResult { Success = true, Output = $"frame {jpeg.Length} bytes" };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get recording frame");
+            return new CommandResult { Success = false, Output = ex.Message };
+        }
+    }
+
+    private async Task<CommandResult> HandleExportRecordingAsync(string parameters, CancellationToken ct)
+    {
+        string? zipPath = null;
+        try
+        {
+            using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(parameters) ? "{}" : parameters);
+            var exportId = doc.RootElement.TryGetProperty("exportId", out var eid) ? eid.GetString() : Guid.NewGuid().ToString();
+            var from = doc.RootElement.TryGetProperty("from", out var fromEl) && fromEl.TryGetDateTime(out var fromDt)
+                ? DateTime.SpecifyKind(fromDt, DateTimeKind.Utc)
+                : DateTime.UtcNow.AddMinutes(-30);
+            var to = doc.RootElement.TryGetProperty("to", out var toEl) && toEl.TryGetDateTime(out var toDt)
+                ? DateTime.SpecifyKind(toDt, DateTimeKind.Utc)
+                : DateTime.UtcNow;
+
+            if (to - from > TimeSpan.FromHours(2))
+                from = to.AddHours(-2);
+
+            var monitorIndex = ReadInt(doc.RootElement, "monitorIndex", 0);
+            zipPath = _recordingStore.CreateJpegZip(from, to, monitorIndex);
+            await _recordingUpload.PostExportAsync(exportId ?? Guid.NewGuid().ToString("N"), ResolveServerComputerId(parameters), zipPath, ct);
+            return new CommandResult { Success = true, Output = exportId };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to export recording");
+            return new CommandResult { Success = false, Output = ex.Message };
+        }
+        finally
+        {
+            if (zipPath is not null)
+            {
+                try { File.Delete(zipPath); } catch { /* ignore */ }
+            }
+        }
+    }
+
+    private string ResolveServerComputerId(string parameters)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(parameters) ? "{}" : parameters);
+            if (doc.RootElement.TryGetProperty("computerId", out var idEl))
+            {
+                var value = idEl.ValueKind == JsonValueKind.String ? idEl.GetString() : idEl.ToString();
+                if (!string.IsNullOrWhiteSpace(value))
+                    return value;
+            }
+        }
+        catch
+        {
+            /* fall back to local id */
+        }
+
+        return _state.ComputerId;
+    }
+
+    private static int ReadInt(JsonElement root, string name, int fallback)
+    {
+        if (!root.TryGetProperty(name, out var el)) return fallback;
+        if (el.ValueKind == JsonValueKind.Number && el.TryGetInt32(out var n)) return n;
+        if (el.ValueKind == JsonValueKind.String && int.TryParse(el.GetString(), out var parsed)) return parsed;
+        return fallback;
     }
 }
 

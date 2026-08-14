@@ -11,6 +11,23 @@ interface User {
   permissions?: string[]
 }
 
+export function normalizeAuthUser(raw: unknown): User {
+  const data = (raw ?? {}) as Record<string, unknown>
+  const roles = data.roles ?? data.Roles
+  const permissions = data.permissions ?? data.Permissions
+  return {
+    id: String(data.id ?? data.Id ?? ''),
+    username: String(data.username ?? data.Username ?? ''),
+    email: String(data.email ?? data.Email ?? ''),
+    roles: Array.isArray(roles) ? roles.map(String) : [],
+    twoFactorEnabled: Boolean(data.twoFactorEnabled ?? data.TwoFactorEnabled),
+    tenantId: data.tenantId != null || data.TenantId != null
+      ? String(data.tenantId ?? data.TenantId)
+      : undefined,
+    permissions: Array.isArray(permissions) ? permissions.map(String) : [],
+  }
+}
+
 interface AuthState {
   user: User | null
   accessToken: string | null
@@ -35,7 +52,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const refresh = localStorage.getItem('refreshToken')
     const user = localStorage.getItem('user')
     if (token && refresh && user) {
-      set({ accessToken: token, refreshToken: refresh, user: JSON.parse(user), isAuthenticated: true, isLoading: false })
+      const parsed = normalizeAuthUser(JSON.parse(user))
+      localStorage.setItem('user', JSON.stringify(parsed))
+      set({ accessToken: token, refreshToken: refresh, user: parsed, isAuthenticated: true, isLoading: false })
     } else {
       set({ isLoading: false })
     }

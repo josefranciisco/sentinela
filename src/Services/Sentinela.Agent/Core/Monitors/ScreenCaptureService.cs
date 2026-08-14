@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
@@ -125,7 +126,7 @@ public class ScreenCaptureService : IScreenCaptureService, IDisposable
     
     public Task<byte[]?> CaptureForStreamingAsync(int maxWidth = 1920, int quality = 50, int? monitorIndex = null)
     {
-        quality = Math.Clamp(quality, 20, 80);
+        quality = Math.Clamp(quality, 20, 95);
         try
         {
             var monitors = GetMonitors();
@@ -145,25 +146,40 @@ public class ScreenCaptureService : IScreenCaptureService, IDisposable
             graphics.CopyFromScreen(bounds.X, bounds.Y, 0, 0, bounds.Size);
 
             var scale = maxWidth > 0 && bounds.Width > maxWidth ? (double)maxWidth / bounds.Width : 1.0;
-            using var resized = scale < 1.0
-                ? new Bitmap(bitmap, (int)(bounds.Width * scale), (int)(bounds.Height * scale))
-                : new Bitmap(bitmap, bounds.Width, bounds.Height);
+            Bitmap encoded = bitmap;
+            Bitmap? resized = null;
+            if (scale < 1.0)
+            {
+                var width = Math.Max(2, (int)(bounds.Width * scale) / 2 * 2);
+                var height = Math.Max(2, (int)(bounds.Height * scale) / 2 * 2);
+                resized = new Bitmap(width, height);
+                using var g = Graphics.FromImage(resized);
+                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                g.SmoothingMode = SmoothingMode.HighQuality;
+                g.CompositingQuality = CompositingQuality.HighQuality;
+                g.DrawImage(bitmap, 0, 0, width, height);
+                encoded = resized;
+            }
+
             using var ms = new MemoryStream();
-
-            var encoderParams = new EncoderParameters(1);
-            encoderParams.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, quality);
-            var jpegCodec = GetEncoderInfo("image/jpeg");
-
-            if (jpegCodec != null)
+            try
             {
-                resized.Save(ms, jpegCodec, encoderParams);
-            }
-            else
-            {
-                resized.Save(ms, ImageFormat.Jpeg);
-            }
+                var encoderParams = new EncoderParameters(1);
+                encoderParams.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, quality);
+                var jpegCodec = GetEncoderInfo("image/jpeg");
 
-            return Task.FromResult<byte[]?>(ms.ToArray());
+                if (jpegCodec != null)
+                    encoded.Save(ms, jpegCodec, encoderParams);
+                else
+                    encoded.Save(ms, ImageFormat.Jpeg);
+
+                return Task.FromResult<byte[]?>(ms.ToArray());
+            }
+            finally
+            {
+                resized?.Dispose();
+            }
         }
         catch (Exception ex)
         {

@@ -33,7 +33,10 @@ public class RedisCacheService : ICacheService
         }
 
         _logger.LogDebug("Cache hit for key {CacheKey}", key);
-        return JsonSerializer.Deserialize<T>(value);
+        return JsonSerializer.Deserialize<T>(value, new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        });
     }
 
     public async Task SetAsync<T>(string key, T value, TimeSpan? expiration = null, CancellationToken cancellationToken = default)

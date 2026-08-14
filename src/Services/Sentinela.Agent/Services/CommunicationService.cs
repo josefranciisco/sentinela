@@ -159,23 +159,10 @@ public class CommunicationService : ICommunicationService
         }
     }
 
-    public async Task<List<CommandData>> FetchPendingCommandsAsync(CancellationToken ct = default)
+    public Task<List<CommandData>> FetchPendingCommandsAsync(CancellationToken ct = default)
     {
-        try
-        {
-            var client = _httpClientFactory.CreateClient("SentinelaApi");
-            var response = await client.GetAsync($"/api/commands/pending?computerId={_state.ComputerId}", ct);
-            if (response.IsSuccessStatusCode)
-            {
-                var result = await response.Content.ReadFromJsonAsync<List<CommandData>>(cancellationToken: ct);
-                return result ?? new List<CommandData>();
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to fetch pending commands");
-        }
-        return new List<CommandData>();
+        // Commands arrive via SignalR ExecuteCommand. The old REST poll hit /api/commands/pending (404).
+        return Task.FromResult(new List<CommandData>());
     }
 
     public async Task<ConfigurationData> FetchConfigurationAsync(CancellationToken ct = default)
@@ -283,6 +270,13 @@ public class HeartbeatData
     public bool IsAgentUpdated { get; set; }
     public int MonitorCount { get; set; } = 1;
     public Guid? TenantId { get; set; }
+    public bool RecordingEnabled { get; set; }
+    public DateTime? RecordingFromUtc { get; set; }
+    public DateTime? RecordingToUtc { get; set; }
+    public long RecordingBytes { get; set; }
+    public bool RecordingInSchedule { get; set; } = true;
+    public string? RecordingScheduleSummary { get; set; }
+    public long RecordingMaxBytes { get; set; }
 }
 
 public class TimelineEntryData

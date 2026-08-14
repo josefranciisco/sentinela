@@ -1,7 +1,8 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Configuration;
+        using Microsoft.Extensions.Options;
+        using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text.Json;
@@ -99,11 +100,15 @@ public static class ApiServiceRegistration
             .AddMessagePackProtocol();
 
         services.AddMemoryCache();
+        services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
+        {
+            options.MultipartBodyLengthLimit = 2_147_483_647;
+        });
         services.AddCors(options =>
         {
             options.AddPolicy("SentinelaCors", policy =>
             {
-                policy.WithOrigins(configuration.GetSection("Cors:Origins").Get<string[]>() ?? new[] { "http://localhost:5173" })
+                policy.SetIsOriginAllowed(origin => IsAllowedCorsOrigin(origin, configuration))
                     .AllowAnyHeader()
                     .AllowAnyMethod()
                     .AllowCredentials();
@@ -114,14 +119,34 @@ public static class ApiServiceRegistration
         services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Program).Assembly));
         services.AddAutoMapper(typeof(Program).Assembly);
         services.AddHttpClient();
+        services.Configure<MonitoramentoOptions>(configuration.GetSection("Monitoramento"));
+        services.AddHttpClient<MonitoramentoFleetClient>((sp, client) =>
+        {
+            var options = sp.GetRequiredService<IOptions<MonitoramentoOptions>>().Value;
+            var baseUrl = string.IsNullOrWhiteSpace(options.BaseUrl) ? "http://192.168.0.116:8000" : options.BaseUrl.TrimEnd('/');
+            client.BaseAddress = new Uri(baseUrl + "/");
+            client.Timeout = TimeSpan.FromSeconds(8);
+        });
         services.AddResponseCaching();
         services.AddResponseCompression();
 
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUser, HttpCurrentUser>();
+        services.AddSingleton<RecordingVideoEncoder>();
 
         services.AddHostedService<ComputerPresenceWorker>();
 
         return services;
+    }
+
+    private static bool IsAllowedCorsOrigin(string? origin, IConfiguration configuration)
+    {
+        if (string.IsNullOrWhiteSpace(origin)) return false;
+        var configured = configuration.GetSection("Cors:Origins").Get<string[]>() ?? [];
+        if (configured.Contains(origin, StringComparer.OrdinalIgnoreCase)) return true;
+        if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri)) return false;
+        var host = uri.Host;
+        return host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+            || host.EndsWith(".vercel.app", StringComparison.OrdinalIgnoreCase);
     }
 }

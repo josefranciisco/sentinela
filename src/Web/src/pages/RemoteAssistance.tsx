@@ -10,6 +10,7 @@ import { Select } from '@/components/ui/select'
 import { Dialog, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Radio, Monitor, PowerOff, Video, VideoOff, Maximize, Minimize, X, Trash2, ChevronDown } from 'lucide-react'
 import { api } from '@/lib/api'
+import { hubUrl } from '@/lib/config'
 import { useSignalR } from '@/hooks/useSignalR'
 
 interface RemoteSession {
@@ -143,7 +144,7 @@ export function RemoteAssistance() {
     label: c.hostname,
   }))
 
-  const connection = useSignalR(selectedSession ? `/hubs/remote?sessionId=${selectedSession}` : '', {
+  const connection = useSignalR(selectedSession ? hubUrl(`/hubs/remote?sessionId=${selectedSession}`) : '', {
     ScreenFrameReceived: (payload: { sessionId: string; frameData: string; frameNumber: number }) => {
       if (payload?.frameData) {
         const base64 = Array.isArray(payload.frameData)

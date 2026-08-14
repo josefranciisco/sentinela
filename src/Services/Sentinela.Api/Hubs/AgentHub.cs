@@ -1,3 +1,4 @@
+using Sentinela.Api.Controllers.v1;
 using Sentinela.Api.Models;
 using Sentinela.Persistence;
 using Sentinela.Persistence.Models;
@@ -34,6 +35,7 @@ public class AgentHub : Hub
     private readonly IHubContext<MonitoringHub> _monitoringHubContext;
     private readonly IHubContext<AlertHub> _alertHubContext;
     private readonly TenantAccessor _tenantAccessor;
+    private readonly ICacheService _cache;
 
     public AgentHub(
         IRepository<Computer> computerRepo,
@@ -48,7 +50,8 @@ public class AgentHub : Hub
         IHubContext<RemoteAssistanceHub> remoteHubContext,
         IHubContext<MonitoringHub> monitoringHubContext,
         IHubContext<AlertHub> alertHubContext,
-        TenantAccessor tenantAccessor)
+        TenantAccessor tenantAccessor,
+        ICacheService cache)
     {
         _computerRepo = computerRepo;
         _heartbeatRepo = heartbeatRepo;
@@ -63,6 +66,7 @@ public class AgentHub : Hub
         _monitoringHubContext = monitoringHubContext;
         _alertHubContext = alertHubContext;
         _tenantAccessor = tenantAccessor;
+        _cache = cache;
     }
 
     public override async Task OnConnectedAsync()
@@ -86,6 +90,26 @@ public class AgentHub : Hub
         computer.UpdateHeartbeat(dto.IpAddress, dto.CurrentUser);
         computer.UpdateMonitorCount(dto.MonitorCount);
         await _computerRepo.SaveChangesAsync();
+
+        if (dto.RecordingEnabled || dto.RecordingBytes > 0)
+        {
+            var key = RecordingsController.MetaKeyPrefix + computer.Id;
+            var existing = await _cache.GetAsync<RecordingStatusDto>(key);
+            await _cache.SetAsync(key, new RecordingStatusDto
+            {
+                ComputerId = computer.Id.ToString(),
+                Enabled = dto.RecordingEnabled,
+                InSchedule = dto.RecordingInSchedule,
+                ScheduleSummary = dto.RecordingScheduleSummary ?? existing?.ScheduleSummary,
+                FromUtc = dto.RecordingFromUtc ?? existing?.FromUtc,
+                ToUtc = dto.RecordingToUtc ?? existing?.ToUtc,
+                Bytes = dto.RecordingBytes > 0 ? dto.RecordingBytes : existing?.Bytes ?? 0,
+                MaxBytes = dto.RecordingMaxBytes > 0 ? dto.RecordingMaxBytes : existing?.MaxBytes ?? 0,
+                Monitors = existing?.Monitors ?? [],
+                Segments = existing?.Segments ?? [],
+                SegmentCount = existing?.SegmentCount ?? 0
+            }, TimeSpan.FromMinutes(5));
+        }
 
         var heartbeat = new Heartbeat(DateTimeOffset.UtcNow, ComputerStatus.Online, 0, 0, 0, 0) { ComputerId = computer.Id };
         await _heartbeatRepo.AddAsync(heartbeat);
