@@ -3,7 +3,7 @@ WORKDIR /app
 COPY src/Web/package*.json ./
 RUN npm install
 COPY src/Web/ .
-RUN npm run build
+RUN rm -f .env.production && npm run build
 
 FROM nginx:alpine AS final
 COPY --from=build /app/dist /usr/share/nginx/html

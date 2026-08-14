@@ -147,6 +147,7 @@ public static class ApiServiceRegistration
         if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri)) return false;
         var host = uri.Host;
         return host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
-            || host.EndsWith(".vercel.app", StringComparison.OrdinalIgnoreCase);
+            || host.EndsWith(".vercel.app", StringComparison.OrdinalIgnoreCase)
+            || host.EndsWith(".trycloudflare.com", StringComparison.OrdinalIgnoreCase);
     }
 }

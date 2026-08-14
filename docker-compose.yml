@@ -279,6 +279,18 @@ services:
       - sentinela-network
     restart: unless-stopped
 
+  # Túnel HTTPS público para a API/Identity (login da Vercel).
+  # A URL sai nos logs: docker compose logs -f cloudflared
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: sentinela-cloudflared
+    command: tunnel --no-autoupdate --url http://sentinela-web:80
+    depends_on:
+      - sentinela-web
+    networks:
+      - sentinela-network
+    restart: unless-stopped
+
 volumes:
   postgres-data:
   redis-data:
