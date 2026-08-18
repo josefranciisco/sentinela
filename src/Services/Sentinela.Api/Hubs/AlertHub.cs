@@ -24,11 +24,7 @@ public class AlertHub : Hub
             await Groups.AddToGroupAsync(Context.ConnectionId, $"role:{role}");
         }
 
-        if (roles.Any(r => r is "Admin" or "SuperAdmin" or "SecurityAnalyst" or "Operator")
-            || Context.User?.IsInRole("Admin") == true
-            || Context.User?.IsInRole("SuperAdmin") == true
-            || Context.User?.IsInRole("SecurityAnalyst") == true
-            || Context.User?.IsInRole("Operator") == true)
+        if (Context.User?.Identity?.IsAuthenticated == true)
         {
             await Groups.AddToGroupAsync(Context.ConnectionId, "security");
             await Groups.AddToGroupAsync(Context.ConnectionId, "admins");

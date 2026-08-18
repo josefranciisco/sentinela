@@ -1,5 +1,3 @@
-using System.Security.Claims;
-
 namespace Sentinela.Api.Hubs;
 
 [Authorize]
@@ -20,7 +18,7 @@ public class MonitoringHub : Hub
             await Groups.AddToGroupAsync(Context.ConnectionId, $"computer:{computerId}");
         }
 
-        if (IsOperator(Context.User))
+        if (Context.User?.Identity?.IsAuthenticated == true)
         {
             await Groups.AddToGroupAsync(Context.ConnectionId, "admins");
             await Groups.AddToGroupAsync(Context.ConnectionId, "security");
@@ -46,18 +44,5 @@ public class MonitoringHub : Hub
     public async Task UnsubscribeFromComputer(string computerId)
     {
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"computer:{computerId}");
-    }
-
-    private static bool IsOperator(ClaimsPrincipal? user)
-    {
-        if (user is null) return false;
-        if (user.IsInRole("Admin") || user.IsInRole("SuperAdmin")
-            || user.IsInRole("Operator") || user.IsInRole("SecurityAnalyst"))
-            return true;
-
-        // Fallback: some tokens put role in a custom claim
-        var roles = user.FindAll(ClaimTypes.Role).Select(c => c.Value)
-            .Concat(user.FindAll("role").Select(c => c.Value));
-        return roles.Any(r => r is "Admin" or "SuperAdmin" or "Operator" or "SecurityAnalyst");
     }
 }

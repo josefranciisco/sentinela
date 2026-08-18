@@ -15,7 +15,7 @@ import { api } from '@/lib/api'
 import { apiUrl } from '@/lib/config'
 import { useComputer, useComputerTimeline, useDepartments, useUpdateComputer } from '@/hooks/useComputers'
 import { useLiveRelativeTime } from '@/hooks/useLiveRelativeTime'
-import { formatDate, formatRelative, formatDuration } from '@/lib/utils'
+import { formatDate, formatRelative, formatDuration, formatSeverity } from '@/lib/utils'
 import { ArrowLeft, Monitor, Clock, Shield, Camera, Radio, Download, Search, Eye, Trash2, Loader2, Maximize2, X, AlertTriangle, User, Package, RefreshCw, Pencil, Save, Video, Cpu } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth'
@@ -621,7 +621,7 @@ function SecurityTab({ computerId, computer }: { computerId: string; computer: a
                     }
                     className="text-[10px] shrink-0 mt-0.5"
                   >
-                    {event.severity}
+                    {formatSeverity(event.severity)}
                   </Badge>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium">

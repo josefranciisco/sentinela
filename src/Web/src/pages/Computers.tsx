@@ -77,9 +77,9 @@ function mobiStatus(status: string): { label: string; variant: 'success' | 'warn
 }
 
 function agentBadge(status: AgentStatus, t: (k: string, d?: string) => string) {
-  if (status === 'online') return { label: t('computers.agentOnline', 'Agent online'), variant: 'success' as const }
-  if (status === 'offline') return { label: t('computers.agentOffline', 'Agent offline'), variant: 'warning' as const }
-  return { label: t('computers.agentNone', 'Sem Agent'), variant: 'secondary' as const }
+  if (status === 'online') return { label: t('computers.agentOnline', 'Agente online'), variant: 'success' as const }
+  if (status === 'offline') return { label: t('computers.agentOffline', 'Agente offline'), variant: 'warning' as const }
+  return { label: t('computers.agentNone', 'Sem Agente'), variant: 'secondary' as const }
 }
 
 function lastSeenLabel(ts: number) {
@@ -155,7 +155,7 @@ export function Computers() {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h1 className="text-2xl font-bold">{t('computers.title')}</h1>
-          <p className="text-muted-foreground text-sm">{t('computers.fleetSubtitle', 'Inventário do monitoramento, integrado ao Agent conforme a instalação.')}</p>
+          <p className="text-muted-foreground text-sm">{t('computers.fleetSubtitle', 'Inventário do monitoramento, integrado ao Agente conforme a instalação.')}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative">
@@ -170,8 +170,8 @@ export function Computers() {
           <div className="inline-flex h-9 items-center rounded-lg bg-muted p-1 text-muted-foreground">
             {([
               ['all', t('computers.filterAll', 'Todas')],
-              ['linked', t('computers.filterLinked', 'Com Agent')],
-              ['unlinked', t('computers.filterUnlinked', 'Sem Agent')],
+              ['linked', t('computers.filterLinked', 'Com Agente')],
+              ['unlinked', t('computers.filterUnlinked', 'Sem Agente')],
             ] as const).map(([key, label]) => (
               <button
                 key={key}
@@ -254,7 +254,7 @@ export function Computers() {
         {preview && (
           <div className="space-y-3 text-sm">
             <p className="text-muted-foreground">
-              {t('computers.noAgentHint', 'Esta máquina ainda não tem o Agent Sentinela. Inventário vem do monitoramento; gravação e USB liberam na instalação.')}
+              {t('computers.noAgentHint', 'Esta máquina ainda não tem o Agente Sentinela. Inventário vem do monitoramento; gravação e USB liberam na instalação.')}
             </p>
             <div className="grid grid-cols-2 gap-2">
               <Fact label="CPU" value={preview.inventory?.cpu?.model} />
@@ -293,7 +293,7 @@ function MachineTable({ machines, onOpen, t }: { machines: FleetMachine[]; onOpe
             <TableRow>
               <TableHead>{t('computers.hostname')}</TableHead>
               <TableHead>{t('computers.status')}</TableHead>
-              <TableHead>{t('computers.agent', 'Agent')}</TableHead>
+              <TableHead>{t('computers.agent', 'Agente')}</TableHead>
               <TableHead>CPU</TableHead>
               <TableHead>RAM</TableHead>
               <TableHead>{t('computers.tabDisks', 'Disco')}</TableHead>
@@ -471,7 +471,7 @@ function InventorySlice({
                 <TableHead>{t('computers.hostname')}</TableHead>
                 <TableHead>{t('computers.detail', 'Detalhe')}</TableHead>
                 <TableHead>{t('computers.info', 'Info')}</TableHead>
-                <TableHead>{t('computers.agent', 'Agent')}</TableHead>
+                <TableHead>{t('computers.agent', 'Agente')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

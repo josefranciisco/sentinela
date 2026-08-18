@@ -6,10 +6,9 @@ import { Toaster } from 'sonner'
 import App from './App'
 import './styles/globals.css'
 import './lib/i18n'
+import { applyTheme, readTheme } from './lib/theme'
 
-const savedTheme = localStorage.getItem('sentinela-theme')
-if (savedTheme === 'light') document.documentElement.classList.remove('dark')
-else if (savedTheme === 'dark') document.documentElement.classList.add('dark')
+applyTheme(readTheme())
 
 const queryClient = new QueryClient({
   defaultOptions: {

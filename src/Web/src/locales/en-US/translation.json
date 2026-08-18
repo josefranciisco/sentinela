@@ -27,11 +27,11 @@
   },
   "hesk": {
     "title": "Tickets",
-    "subtitle": "Latest HESK events",
+    "subtitle": "Latest SGM tickets",
     "open": "open",
     "collapse": "Collapse",
     "empty": "No recent tickets.",
-    "unavailable": "Waiting for the HESK feed.",
+    "unavailable": "Waiting for the SGM ticket feed.",
     "newTicket": "New ticket",
     "openTicket": "Open",
     "openSection": "Open",

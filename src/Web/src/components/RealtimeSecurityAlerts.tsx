@@ -4,6 +4,7 @@ import * as signalR from '@microsoft/signalr'
 import { toast } from 'sonner'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '@/stores/auth'
+import { api } from '@/lib/api'
 import { hubUrl } from '@/lib/config'
 import { useSecurityAlertsStore } from '@/stores/securityAlerts'
 
@@ -27,6 +28,7 @@ const EVENT_LABELS: Record<string, string> = {
 /** Eventos que sempre geram toast em tempo real (como pendrive). */
 const ALWAYS_ALERT_TYPES = new Set([
   'USBConnected',
+  'USBDisconnected',
   'FileCopy',
   'SoftwareInstalled',
   'SoftwareUninstalled',
@@ -133,6 +135,34 @@ export function RealtimeSecurityAlerts() {
   useEffect(() => {
     if (!token || !isAuthenticated) return
 
+    let cancelled = false
+    ;(async () => {
+      try {
+        const page = await api.get<{
+          items: {
+            id: string
+            computerId?: string
+            computerName?: string
+            eventType: string
+            category?: string
+            description: string
+            severity: string
+            timestamp: string
+          }[]
+        }>('/security/events?pageSize=40')
+        if (cancelled) return
+        for (const item of page.items ?? []) {
+          if (!shouldNotify(item.eventType, item.severity)) continue
+          const alert = normalizePayload(item)
+          if (handledIds.current.has(alert.id)) continue
+          handledIds.current.add(alert.id)
+          push(alert)
+        }
+      } catch {
+        /* sino fica só no tempo real se o histórico falhar */
+      }
+    })()
+
     const handleEvent = (raw: any) => {
       const alert = normalizePayload(raw)
       if (handledIds.current.has(alert.id)) return
@@ -180,6 +210,7 @@ export function RealtimeSecurityAlerts() {
     alerts.start().catch((err) => console.error('AlertHub error:', err))
 
     return () => {
+      cancelled = true
       monitoring.stop()
       alerts.stop()
     }

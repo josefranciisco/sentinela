@@ -81,14 +81,15 @@ services:
       Cors__Origins__0: http://localhost:3000
       Cors__Origins__1: http://localhost:5173
       Cors__Origins__2: http://192.168.0.116:3000
+      Cors__Origins__3: https://sentinela.mobi.com
       Monitoramento__BaseUrl: http://host.docker.internal:8000
-      Hesk__BaseUrl: http://192.168.0.116/chamados
-      Hesk__FeedPath: sentinela-feed.php
-      Hesk__Token: ${HESK_TOKEN:-}
-      Hesk__AdminUrl: http://menu/chamados/admin
-      Hesk__PollSeconds: 8
+      Sgm__ConnectionString: ${SGM_SQL_CONNECTION:-}
+      Sgm__AppBaseUrl: ${SGM_APP_BASE_URL:-}
+      Sgm__HeskAdminUrl: http://menu/chamados/admin
+      Sgm__PollSeconds: 8
     extra_hosts:
       - "host.docker.internal:host-gateway"
+      - "GER-WEBSERVER:192.168.0.202"
     ports:
        - "5002:8080"
     volumes:
@@ -131,6 +132,7 @@ services:
       Cors__Origins__0: http://localhost:3000
       Cors__Origins__1: http://localhost:5173
       Cors__Origins__2: http://192.168.0.116:3000
+      Cors__Origins__3: https://sentinela.mobi.com
     ports:
        - "5003:8080"
     depends_on:
@@ -284,11 +286,21 @@ services:
       - sentinela-network
     restart: unless-stopped
 
-  # Túnel HTTPS público para a API/Identity (login da Vercel).
-  # A URL sai nos logs: docker compose logs -f cloudflared
+  # Túnel HTTPS público do Sentinela (hostname fixo: sentinela.mobi.com).
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: sentinela-cloudflared
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - sentinela-web
+    networks:
+      - sentinela-network
+    restart: unless-stopped
+
+  # URL pública imediata (trycloudflare) enquanto o DNS de sentinela.mobi.com não existir.
+  cloudflared-quick:
+    image: cloudflare/cloudflared:latest
+    container_name: sentinela-cloudflared-quick
     command: tunnel --no-autoupdate --url http://sentinela-web:80
     depends_on:
       - sentinela-web

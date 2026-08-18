@@ -482,13 +482,14 @@ public class AgentHub : Hub
         // Agent hub group (legacy / agents)
         await Clients.Group("admins").SendAsync("SecurityEvent", payload);
 
-        // Web clients connect to MonitoringHub / AlertHub — bridge realtime alerts there
-        await _monitoringHubContext.Clients.Group("admins").SendAsync("SecurityEvent", payload);
-        await _alertHubContext.Clients.Group("security").SendAsync("SecurityEvent", payload);
-        await _alertHubContext.Clients.Group("security").SendAsync("AlertCreated", new
+        // Web: todos os clientes autenticados dos hubs (não só o grupo "admins")
+        await _monitoringHubContext.Clients.All.SendAsync("SecurityEvent", payload);
+        await _alertHubContext.Clients.All.SendAsync("SecurityEvent", payload);
+        await _alertHubContext.Clients.All.SendAsync("AlertCreated", new
         {
             Id = securityEvent.Id,
             Title = securityEvent.EventType,
+            EventType = securityEvent.EventType,
             Description = securityEvent.Description,
             Severity = securityEvent.Severity.ToString(),
             Category = securityEvent.Category,
@@ -496,6 +497,9 @@ public class AgentHub : Hub
             ComputerName = computer?.Hostname,
             CreatedAt = securityEvent.Timestamp
         });
+
+        await _monitoringHubContext.Clients.Group("admins").SendAsync("SecurityEvent", payload);
+        await _alertHubContext.Clients.Group("security").SendAsync("SecurityEvent", payload);
 
         if (securityEvent.Severity is Severity.High or Severity.Critical)
         {

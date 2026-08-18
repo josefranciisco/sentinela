@@ -1,15 +1,16 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { cn, formatRelative } from '@/lib/utils'
+import { cn, formatRelative, formatSeverity } from '@/lib/utils'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '@/stores/auth'
 import { useSecurityAlertsStore } from '@/stores/securityAlerts'
 import { Avatar } from '@/components/ui/avatar'
 import {
-  Search, Bell, Menu, Command, Globe,
+  Search, Bell, Menu, Command, Globe, Sun, Moon,
   Settings as SettingsIcon, LogOut, ShieldAlert,
 } from 'lucide-react'
 import i18n from '@/lib/i18n'
+import { applyTheme, readTheme, type Theme } from '@/lib/theme'
 
 interface HeaderProps {
   onMenuClick: () => void
@@ -40,6 +41,7 @@ export function Header({ onMenuClick }: HeaderProps) {
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [langMenuOpen, setLangMenuOpen] = useState(false)
   const [bellOpen, setBellOpen] = useState(false)
+  const [theme, setTheme] = useState<Theme>(() => readTheme())
   const searchRef = useRef<HTMLInputElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const langRef = useRef<HTMLDivElement>(null)
@@ -94,7 +96,7 @@ export function Header({ onMenuClick }: HeaderProps) {
   }
 
   return (
-    <header className="flex items-center justify-between h-16 px-4 md:px-6 border-b border-border/50 bg-card/25 backdrop-blur-xl">
+    <header className="relative z-40 flex h-16 shrink-0 items-center justify-between border-b border-border/50 bg-card/25 px-4 backdrop-blur-xl md:px-6">
       <div className="flex items-center gap-4">
         <button onClick={onMenuClick} className="p-2 rounded-lg hover:bg-accent text-muted-foreground lg:hidden">
           <Menu className="h-5 w-5" />
@@ -142,7 +144,7 @@ export function Header({ onMenuClick }: HeaderProps) {
           </button>
 
           {bellOpen && (
-            <div className="absolute right-0 top-full mt-1 w-96 max-h-[28rem] overflow-hidden rounded-lg border bg-popover shadow-lg animate-in z-50">
+            <div className="absolute right-0 top-full mt-1 z-[100] w-96 max-h-[28rem] overflow-hidden rounded-lg border bg-popover shadow-lg animate-in">
               <div className="flex items-center justify-between px-3 py-2 border-b border-border">
                 <p className="text-sm font-medium flex items-center gap-1.5">
                   <ShieldAlert className="h-4 w-4 text-destructive" />
@@ -175,12 +177,12 @@ export function Header({ onMenuClick }: HeaderProps) {
                           {a.computerName ? ` · ${a.computerName}` : ''}
                         </p>
                         <span className={cn(
-                          'text-[10px] uppercase font-semibold shrink-0',
+                          'text-[10px] font-semibold shrink-0',
                           a.severity.toLowerCase() === 'critical' || a.severity.toLowerCase() === 'high'
                             ? 'text-destructive'
                             : 'text-amber-500'
                         )}>
-                          {a.severity}
+                          {formatSeverity(a.severity)}
                         </span>
                       </div>
                       <p className="text-xs text-muted-foreground truncate mt-0.5">{a.description}</p>
@@ -192,6 +194,20 @@ export function Header({ onMenuClick }: HeaderProps) {
             </div>
           )}
         </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            const next = theme === 'dark' ? 'light' : 'dark'
+            setTheme(next)
+            applyTheme(next)
+          }}
+          className="p-2 rounded-lg text-muted-foreground/80 hover:bg-accent hover:text-foreground transition-colors"
+          title={theme === 'dark' ? t('settings.themeLight', 'Claro') : t('settings.themeDark', 'Escuro')}
+          aria-label={theme === 'dark' ? t('settings.themeLight', 'Claro') : t('settings.themeDark', 'Escuro')}
+        >
+          {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+        </button>
 
         <div ref={langRef} className="relative">
           <button onClick={() => setLangMenuOpen(!langMenuOpen)} className="flex items-center gap-1 p-2 rounded-lg hover:bg-accent text-muted-foreground transition-colors text-sm">

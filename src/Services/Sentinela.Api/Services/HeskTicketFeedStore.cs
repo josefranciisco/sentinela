@@ -2,10 +2,11 @@ namespace Sentinela.Api.Services;
 
 public class HeskOptions
 {
-    public string BaseUrl { get; set; } = "http://192.168.0.116/chamados";
-    public string FeedPath { get; set; } = "sentinela-feed.php";
-    public string Token { get; set; } = "sentinela-mobi-hesk";
-    public string AdminUrl { get; set; } = "http://menu/chamados/admin";
+    /// <summary>SQL Server SGM (sgm.dbo.sgm_chamados). Vazio desliga o feed.</summary>
+    public string ConnectionString { get; set; } = "";
+    /// <summary>Base do app SGM, ex. https://intranet — o clique abre {base}/ti/chamados?id=123.</summary>
+    public string AppBaseUrl { get; set; } = "";
+    public string HeskAdminUrl { get; set; } = "http://menu/chamados/admin";
     public int PollSeconds { get; set; } = 8;
 }
 

@@ -31,6 +31,19 @@ export function formatBytes(bytes: number) {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`
 }
 
+export function formatSeverity(severity: string) {
+  const key = (severity || '').trim().toLowerCase()
+  const labels: Record<string, string> = {
+    critical: 'Crítico',
+    high: 'Alto',
+    medium: 'Médio',
+    low: 'Baixo',
+    info: 'Info',
+    informational: 'Informativo',
+  }
+  return labels[key] || severity
+}
+
 export function formatDuration(seconds: number) {
   const h = Math.floor(seconds / 3600)
   const m = Math.floor((seconds % 3600) / 60)

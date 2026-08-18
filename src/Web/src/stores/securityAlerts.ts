@@ -22,6 +22,10 @@ interface SecurityAlertsState {
   clear: () => void
 }
 
+function byNewest(a: SecurityAlertItem, b: SecurityAlertItem) {
+  return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+}
+
 export const useSecurityAlertsStore = create<SecurityAlertsState>((set, get) => ({
   alerts: [],
   unreadCount: 0,
@@ -30,7 +34,7 @@ export const useSecurityAlertsStore = create<SecurityAlertsState>((set, get) => 
     const existing = get().alerts
     if (existing.some((a) => a.id === alert.id)) return
 
-    const next = [{ ...alert, read: false }, ...existing].slice(0, 50)
+    const next = [{ ...alert, read: false }, ...existing].sort(byNewest).slice(0, 50)
     set({
       alerts: next,
       unreadCount: next.filter((a) => !a.read).length,

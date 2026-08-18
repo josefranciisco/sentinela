@@ -24,7 +24,7 @@ public class HeskTicketPoller : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var seconds = Math.Clamp(_options.PollSeconds, 5, 60);
-        _logger.LogInformation("HESK ticket poller started every {Seconds}s ({Url})", seconds, _options.BaseUrl);
+        _logger.LogInformation("SGM chamado poller started every {Seconds}s", seconds);
 
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(seconds));
         await RefreshAsync(stoppingToken);
@@ -44,7 +44,7 @@ public class HeskTicketPoller : BackgroundService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "HESK poll failed");
+            _logger.LogWarning(ex, "SGM chamado poll failed");
         }
     }
 }

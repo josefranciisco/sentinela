@@ -7,24 +7,15 @@ import { Button } from '@/components/ui/button'
 import { Globe, Moon, Sun, Users, Shield } from 'lucide-react'
 import { toast } from 'sonner'
 import i18n from '@/lib/i18n'
+import { applyTheme, readTheme } from '@/lib/theme'
 
-const THEME_KEY = 'sentinela-theme'
 const LANG_KEY = 'sentinela-lang'
-
-function applyTheme(theme: 'light' | 'dark') {
-  document.documentElement.classList.toggle('dark', theme === 'dark')
-  localStorage.setItem(THEME_KEY, theme)
-}
 
 export function Settings() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [language, setLanguage] = useState(i18n.language || 'pt-BR')
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    const saved = localStorage.getItem(THEME_KEY) as 'light' | 'dark' | null
-    if (saved === 'light' || saved === 'dark') return saved
-    return document.documentElement.classList.contains('dark') ? 'dark' : 'light'
-  })
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => readTheme())
 
   useEffect(() => {
     applyTheme(theme)
