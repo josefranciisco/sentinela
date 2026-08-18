@@ -23,6 +23,7 @@ public class ScreenCaptureService : IScreenCaptureService, IDisposable
     private readonly AgentOptions _options;
     private readonly ILogger<ScreenCaptureService> _logger;
     private readonly byte[] _encryptionKey;
+    private DateTime _lastStreamWarnUtc = DateTime.MinValue;
     
     public ScreenCaptureService(IOptions<AgentOptions> options, ILogger<ScreenCaptureService> logger)
     {
@@ -183,7 +184,11 @@ public class ScreenCaptureService : IScreenCaptureService, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogWarning("Failed to capture screen for streaming: {Message}", ex.Message);
+            if (DateTime.UtcNow - _lastStreamWarnUtc > TimeSpan.FromSeconds(60))
+            {
+                _lastStreamWarnUtc = DateTime.UtcNow;
+                _logger.LogWarning(ex, "Failed to capture screen for streaming");
+            }
             return Task.FromResult<byte[]?>(null);
         }
     }

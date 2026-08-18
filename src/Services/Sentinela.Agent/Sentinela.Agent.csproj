@@ -6,6 +6,12 @@
     <Nullable>enable</Nullable>
     <OutputType>WinExe</OutputType>
     <UseWindowsForms>false</UseWindowsForms>
+    <Version>1.0.1</Version>
+    <Product>Sentinela</Product>
+    <Company>Mobi</Company>
+    <Description>Agente de monitoramento Sentinela</Description>
+    <ApplicationIcon>..\..\..\scripts\installer\setup.ico</ApplicationIcon>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="9.0.0" />
@@ -40,5 +46,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\BuildingBlocks\Sentinela.Shared\Sentinela.Shared.csproj" />
     <ProjectReference Include="..\Sentinela.ScreenCapture\Sentinela.ScreenCapture.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Update="appsettings.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

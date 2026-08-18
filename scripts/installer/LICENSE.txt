@@ -1,0 +1,16 @@
+SENTINELA — Contrato de licença de uso
+
+Este software é destinado ao uso interno da organização que o implantou.
+
+Ao clicar em "Aceitar" e instalar o Agente Sentinela, você concorda que:
+
+1. O agente será instalado como serviço do Windows (Agente Sentinela) e iniciará
+   automaticamente com o computador.
+2. O agente coleta telemetria de segurança, inventário e, quando habilitado,
+   gravação local da tela conforme a política da organização.
+3. Os dados são enviados apenas ao servidor Sentinela informado durante a
+   instalação, na rede da organização.
+4. A desinstalação pode ser feita em "Aplicativos e recursos" do Windows.
+   Gravações e logs em C:\ProgramData\Sentinela são preservados.
+
+Em caso de dúvida, procure a equipe de TI.

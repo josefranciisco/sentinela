@@ -35,6 +35,13 @@ public static class NativeMethods
     public const uint TOKEN_QUERY = 0x0008;
     public const uint TOKEN_DUPLICATE = 0x0002;
     public const uint TOKEN_ASSIGN_PRIMARY = 0x0001;
+    public const uint TOKEN_ADJUST_DEFAULT = 0x0080;
+    public const uint TOKEN_ADJUST_SESSIONID = 0x0100;
+    public const uint MAXIMUM_ALLOWED = 0x02000000;
+    public const uint CREATE_UNICODE_ENVIRONMENT = 0x00000400;
+    public const uint CREATE_NO_WINDOW = 0x08000000;
+    public const uint STARTF_USESHOWWINDOW = 0x00000001;
+    public const uint INVALID_SESSION_ID = 0xFFFFFFFF;
 
     public const uint PROCESS_QUERY_INFORMATION = 0x0400;
     public const uint PROCESS_VM_READ = 0x0010;
@@ -171,6 +178,38 @@ public static class NativeMethods
         ref STARTUPINFO lpStartupInfo,
         out PROCESS_INFORMATION lpProcessInformation);
 
+    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode, EntryPoint = "CreateProcessAsUserW")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool CreateProcessAsUserW(
+        IntPtr hToken,
+        string lpApplicationName,
+        StringBuilder lpCommandLine,
+        IntPtr lpProcessAttributes,
+        IntPtr lpThreadAttributes,
+        bool bInheritHandles,
+        uint dwCreationFlags,
+        IntPtr lpEnvironment,
+        string lpCurrentDirectory,
+        ref STARTUPINFO lpStartupInfo,
+        out PROCESS_INFORMATION lpProcessInformation);
+
+    [DllImport("userenv.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool CreateEnvironmentBlock(out IntPtr lpEnvironment, IntPtr hToken, bool bInherit);
+
+    [DllImport("userenv.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool DestroyEnvironmentBlock(IntPtr lpEnvironment);
+
+    [DllImport("wtsapi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool WTSEnumerateSessions(
+        IntPtr hServer,
+        int Reserved,
+        int Version,
+        out IntPtr ppSessionInfo,
+        out int pCount);
+
     [DllImport("advapi32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool DuplicateTokenEx(
@@ -273,6 +312,14 @@ public static class NativeMethods
         WTSValidationInfo,
         WTSSessionAddressV4,
         WTSIsRemoteSession
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct WTS_SESSION_INFO
+    {
+        public uint SessionId;
+        public IntPtr pWinStationName;
+        public WTS_CONNECTSTATE_CLASS State;
     }
 
     public enum WTS_CONNECTSTATE_CLASS
