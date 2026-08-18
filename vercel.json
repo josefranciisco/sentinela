@@ -5,6 +5,8 @@
   "buildCommand": "npm run build --prefix src/Web",
   "outputDirectory": "src/Web/dist",
   "rewrites": [
+    { "source": "/api/:path*", "destination": "https://mood-hardware-ict-guidelines.trycloudflare.com/api/:path*" },
+    { "source": "/hubs/:path*", "destination": "https://mood-hardware-ict-guidelines.trycloudflare.com/hubs/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
