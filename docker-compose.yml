@@ -82,6 +82,11 @@ services:
       Cors__Origins__1: http://localhost:5173
       Cors__Origins__2: http://192.168.0.116:3000
       Monitoramento__BaseUrl: http://host.docker.internal:8000
+      Hesk__BaseUrl: http://192.168.0.116/chamados
+      Hesk__FeedPath: sentinela-feed.php
+      Hesk__Token: ${HESK_TOKEN:-}
+      Hesk__AdminUrl: http://menu/chamados/admin
+      Hesk__PollSeconds: 8
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:

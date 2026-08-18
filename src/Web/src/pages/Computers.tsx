@@ -340,7 +340,10 @@ function MachineCards({ machines, onOpen, t }: { machines: FleetMachine[]; onOpe
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {machines.map((m) => {
+        const st = mobiStatus(m.status)
         const offline = (m.status || '').toLowerCase() === 'offline'
+        const seen = lastSeenLabel(m.lastSeen)
+        const downFor = offlineLabel(m.lastSeen, m.status)
         return (
           <button
             key={m.hostname}
@@ -348,7 +351,37 @@ function MachineCards({ machines, onOpen, t }: { machines: FleetMachine[]; onOpe
             onClick={() => onOpen(m)}
             className="text-left rounded-xl border border-border/50 bg-card/60 backdrop-blur-xl p-4 space-y-3 transition-colors hover:border-primary/40 hover:bg-card"
           >
-            <p className="font-semibold truncate">{m.alias || m.hostname}</p>
+            <div className="space-y-1.5 min-w-0">
+              <p className="font-semibold truncate">{m.alias || m.hostname}</p>
+              <div className="flex items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1.5 min-w-0">
+                  <span
+                    className={cn(
+                      'h-1.5 w-1.5 rounded-full shrink-0',
+                      st.variant === 'success' && 'bg-emerald-400',
+                      st.variant === 'warning' && 'bg-amber-400',
+                      st.variant === 'destructive' && 'bg-destructive',
+                      st.variant === 'secondary' && 'bg-muted-foreground/50',
+                    )}
+                  />
+                  <span className={cn(
+                    'text-[11px] font-medium',
+                    st.variant === 'success' && 'text-emerald-400',
+                    st.variant === 'warning' && 'text-amber-400',
+                    st.variant === 'destructive' && 'text-destructive',
+                    st.variant === 'secondary' && 'text-muted-foreground',
+                  )}>
+                    {st.label}
+                  </span>
+                </span>
+                <span
+                  className="shrink-0 text-[10px] tabular-nums tracking-wide text-muted-foreground/70"
+                  title={m.lastSeen ? new Date(m.lastSeen * 1000).toLocaleString('pt-BR') : undefined}
+                >
+                  {downFor || seen}
+                </span>
+              </div>
+            </div>
             <div className="space-y-2">
               <Meter label="CPU" value={m.metrics?.cpuPercent || 0} muted={offline} />
               <Meter label="RAM" value={m.metrics?.ramPercent || 0} muted={offline} />

@@ -127,6 +127,13 @@ public static class ApiServiceRegistration
             client.BaseAddress = new Uri(baseUrl + "/");
             client.Timeout = TimeSpan.FromSeconds(8);
         });
+        services.Configure<HeskOptions>(configuration.GetSection("Hesk"));
+        services.AddHttpClient<HeskTicketClient>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(10);
+        });
+        services.AddSingleton<HeskTicketFeedStore>();
+        services.AddHostedService<HeskTicketPoller>();
         services.AddResponseCaching();
         services.AddResponseCompression();
 

@@ -51,9 +51,9 @@ public class ScreenCaptureService : IScreenCaptureService, IDisposable
         try
         {
             var bounds = GetScreenBounds();
-            using var bitmap = new Bitmap(bounds.Width, bounds.Height);
+            using var bitmap = new Bitmap(Math.Max(1, bounds.Width), Math.Max(1, bounds.Height));
             using var graphics = Graphics.FromImage(bitmap);
-            graphics.CopyFromScreen(bounds.X, bounds.Y, 0, 0, bounds.Size);
+            CopyScreen(graphics, bounds);
             
             using var ms = new MemoryStream();
             bitmap.Save(ms, ImageFormat.Jpeg);
@@ -141,9 +141,9 @@ public class ScreenCaptureService : IScreenCaptureService, IDisposable
                 bounds = BoundingRectFromMonitors(monitors);
             }
 
-            using var bitmap = new Bitmap(bounds.Width, bounds.Height);
+            using var bitmap = new Bitmap(Math.Max(1, bounds.Width), Math.Max(1, bounds.Height));
             using var graphics = Graphics.FromImage(bitmap);
-            graphics.CopyFromScreen(bounds.X, bounds.Y, 0, 0, bounds.Size);
+            CopyScreen(graphics, bounds);
 
             var scale = maxWidth > 0 && bounds.Width > maxWidth ? (double)maxWidth / bounds.Width : 1.0;
             Bitmap encoded = bitmap;
@@ -183,7 +183,7 @@ public class ScreenCaptureService : IScreenCaptureService, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to capture screen for streaming");
+            _logger.LogWarning("Failed to capture screen for streaming: {Message}", ex.Message);
             return Task.FromResult<byte[]?>(null);
         }
     }
@@ -231,6 +231,39 @@ public class ScreenCaptureService : IScreenCaptureService, IDisposable
         }
         return minX == int.MaxValue ? new Rectangle(0, 0, 1920, 1080)
             : new Rectangle(minX, minY, maxX - minX, maxY - minY);
+    }
+
+    private const int SRCCOPY = 0x00CC0020;
+    private const int CAPTUREBLT = 0x40000000;
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetDC(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
+
+    [DllImport("gdi32.dll")]
+    private static extern bool BitBlt(IntPtr hdcDest, int xDest, int yDest, int w, int h, IntPtr hdcSrc, int xSrc, int ySrc, int rop);
+
+    private static void CopyScreen(Graphics graphics, Rectangle bounds)
+    {
+        var hdcDest = graphics.GetHdc();
+        var hdcSrc = GetDC(IntPtr.Zero);
+        var ok = false;
+        try
+        {
+            if (hdcSrc != IntPtr.Zero)
+                ok = BitBlt(hdcDest, 0, 0, bounds.Width, bounds.Height, hdcSrc, bounds.X, bounds.Y, SRCCOPY | CAPTUREBLT);
+        }
+        finally
+        {
+            if (hdcSrc != IntPtr.Zero)
+                ReleaseDC(IntPtr.Zero, hdcSrc);
+            graphics.ReleaseHdc(hdcDest);
+        }
+
+        if (!ok)
+            graphics.CopyFromScreen(bounds.X, bounds.Y, 0, 0, bounds.Size);
     }
 
     [DllImport("user32.dll")]

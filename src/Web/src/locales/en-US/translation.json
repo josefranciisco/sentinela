@@ -25,6 +25,18 @@
     "settings": "Settings",
     "logout": "Logout"
   },
+  "hesk": {
+    "title": "Tickets",
+    "subtitle": "Latest HESK events",
+    "open": "open",
+    "collapse": "Collapse",
+    "empty": "No recent tickets.",
+    "unavailable": "Waiting for the HESK feed.",
+    "newTicket": "New ticket",
+    "openTicket": "Open",
+    "openSection": "Open",
+    "resolvedSection": "Resolved"
+  },
   "login": {
     "title": "Sentinela",
     "subtitle": "Corporate Monitoring Platform",

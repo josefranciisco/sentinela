@@ -25,6 +25,18 @@
     "settings": "Configurações",
     "logout": "Sair"
   },
+  "hesk": {
+    "title": "Chamados",
+    "subtitle": "Últimos eventos do HESK",
+    "open": "abertos",
+    "collapse": "Recolher",
+    "empty": "Nenhum chamado recente.",
+    "unavailable": "Aguardando o feed do HESK.",
+    "newTicket": "Novo chamado",
+    "openTicket": "Abrir",
+    "openSection": "Abertos",
+    "resolvedSection": "Resolvidos"
+  },
   "login": {
     "title": "Sentinela",
     "subtitle": "Plataforma Corporativa de Monitoramento",

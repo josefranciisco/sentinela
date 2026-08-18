@@ -3,7 +3,8 @@ WORKDIR /app
 COPY src/Web/package*.json ./
 RUN npm install
 COPY src/Web/ .
-RUN rm -f .env.production && npm run build
+# Same-origin via nginx. Do not bake local/Vercel API URLs into the Docker image.
+RUN rm -f .env .env.local .env.production .env.production.local && npm run build
 
 FROM nginx:alpine AS final
 COPY --from=build /app/dist /usr/share/nginx/html

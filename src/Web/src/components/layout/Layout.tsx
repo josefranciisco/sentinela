@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
 import { RealtimeSecurityAlerts } from '@/components/RealtimeSecurityAlerts'
+import { HeskTicketRail } from '@/components/HeskTicketRail'
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -25,6 +26,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </div>
           </main>
         </div>
+        <HeskTicketRail />
       </div>
     </div>
   )
