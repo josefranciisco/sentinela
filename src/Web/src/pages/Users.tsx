@@ -180,7 +180,8 @@ export function Users() {
     u.email.toLowerCase().includes(search.toLowerCase())
   )
 
-  const visibleRoles = roles.filter(r => ['administrador', 'operador'].includes(r.name))
+  const allowedRoles = ['administrador', 'operador']
+  const visibleRoles = roles.filter(r => allowedRoles.includes(r.name.toLowerCase()))
 
   if (loading) {
     return <div className="flex items-center justify-center h-64">Carregando...</div>

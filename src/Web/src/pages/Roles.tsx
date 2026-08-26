@@ -140,8 +140,9 @@ export function Roles() {
     }
   }
 
+  const allowedRoles = ['administrador', 'operador']
   const filteredRoles = roles.filter(r =>
-    ['administrador', 'operador'].includes(r.name) &&
+    allowedRoles.includes(r.name.toLowerCase()) &&
     r.name.toLowerCase().includes(search.toLowerCase())
   )
 
