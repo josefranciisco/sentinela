@@ -371,10 +371,11 @@ public class ComputersController : ControllerBase
                 DisabledComputers = await computers.CountAsync(c => c.Status == ComputerStatus.Disabled),
                 TotalUsers = await computers.Select(c => c.CurrentUser).Distinct().CountAsync(),
                 TotalDepartments = await computers.Select(c => c.Department).Distinct().CountAsync(),
-                TotalAlerts = await _alertRepo.Query().CountAsync(a => a.Status == AlertStatus.Open && a.TenantId == tenantId),
+                TotalAlerts = await _alertRepo.Query().CountAsync(a => a.Status == AlertStatus.Open && a.TenantId == tenantId)
+                    + await ActiveUsbAlertCounter.CountAsync(_timelineRepo.Query(), await computers.Select(c => c.Id).ToListAsync()),
                 CriticalAlerts = await _alertRepo.Query().CountAsync(a => a.Status == AlertStatus.Open && a.Severity == Severity.Critical && a.TenantId == tenantId)
             };
-        }, TimeSpan.FromSeconds(30));
+        }, TimeSpan.FromSeconds(5));
         
         return Ok(stats);
     }

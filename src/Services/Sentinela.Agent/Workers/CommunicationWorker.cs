@@ -10,10 +10,10 @@ public class CommunicationWorker : BackgroundService
     private readonly IAgentHubClient _hubClient;
     private readonly ICommunicationService _communication;
     private readonly IOfflineCacheService _cache;
-    private readonly ICommandService _commandService;
-    private readonly IConfigurationService _configService;
+    private readonly ICommandService? _commandService;
+    private readonly IConfigurationService? _configService;
     private readonly IAgentStateService _state;
-    private readonly IAgentHealthService _healthService;
+    private readonly IAgentHealthService? _healthService;
     private readonly ServerConnectionOptions _options;
     private readonly ILogger<CommunicationWorker> _logger;
 
@@ -21,19 +21,19 @@ public class CommunicationWorker : BackgroundService
         IAgentHubClient hubClient,
         ICommunicationService communication,
         IOfflineCacheService cache,
-        ICommandService commandService,
-        IConfigurationService configService,
         IAgentStateService state,
-        IAgentHealthService healthService,
         IOptions<ServerConnectionOptions> options,
-        ILogger<CommunicationWorker> logger)
+        ILogger<CommunicationWorker> logger,
+        ICommandService? commandService = null,
+        IConfigurationService? configService = null,
+        IAgentHealthService? healthService = null)
     {
         _hubClient = hubClient;
         _communication = communication;
         _cache = cache;
+        _state = state;
         _commandService = commandService;
         _configService = configService;
-        _state = state;
         _healthService = healthService;
         _options = options.Value;
         _logger = logger;
@@ -46,10 +46,25 @@ public class CommunicationWorker : BackgroundService
         await Task.Delay(2000, stoppingToken);
 
         await _cache.InitializeAsync();
-        await _hubClient.ConnectAsync(stoppingToken);
+
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                await _hubClient.ConnectAsync(stoppingToken);
+                _logger.LogInformation("Hub connected successfully");
+                break;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to connect to hub, retrying in {Delay}s", 5);
+                await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+            }
+        }
 
         _hubClient.CommandReceived += async (s, e) =>
         {
+            if (_commandService is null) return;
             try
             {
                 var result = await _commandService.ExecuteCommandAsync(e.Command, stoppingToken);
@@ -63,6 +78,7 @@ public class CommunicationWorker : BackgroundService
 
         _hubClient.ConfigUpdated += async (s, e) =>
         {
+            if (_configService is null) return;
             try
             {
                 var config = System.Text.Json.JsonSerializer.Deserialize<ConfigurationData>(e.ConfigJson);
@@ -108,7 +124,19 @@ public class CommunicationWorker : BackgroundService
     {
         try
         {
-            if (!_communication.IsOnline) return;
+            if (!_communication.IsOnline)
+            {
+                _logger.LogInformation("Hub offline — attempting reconnect");
+                try
+                {
+                    await _hubClient.ConnectAsync(ct);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Reconnect attempt failed");
+                }
+                return;
+            }
 
             var pendingEvents = await _cache.GetPendingEventsAsync();
             if (pendingEvents.Count > 0)

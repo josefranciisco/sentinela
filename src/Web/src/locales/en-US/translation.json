@@ -315,6 +315,7 @@
     "showAll": "Show all",
     "record": "Record",
     "stopRecording": "Stop recording",
+    "screenshot": "Screenshot",
     "confirmShutdown": "Are you sure you want to shut down this machine?",
     "stopStream": "Stop stream",
     "confirmStopStream": "Do you want to stop this stream?"

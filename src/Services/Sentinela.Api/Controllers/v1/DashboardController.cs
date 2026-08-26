@@ -48,6 +48,9 @@ public class DashboardController : ControllerBase
         {
             var computers = _computerRepo.Query().Where(c => !c.IsDeleted && c.TenantId == tenantId);
             var alerts = _alertRepo.Query().Where(a => !a.IsDeleted && a.TenantId == tenantId);
+            var computerIds = await computers.Select(c => c.Id).ToListAsync();
+            var openAlerts = await alerts.CountAsync(a => a.Status == AlertStatus.Open);
+            var activeUsb = await ActiveUsbAlertCounter.CountAsync(_timelineRepo.Query(), computerIds);
 
             return new DashboardStatsDto
             {
@@ -56,11 +59,11 @@ public class DashboardController : ControllerBase
                 OfflineComputers = await computers.CountAsync(c => c.Status == ComputerStatus.Offline),
                 TotalUsers = await computers.Select(c => c.CurrentUser).Distinct().CountAsync(),
                 TotalDepartments = await computers.Select(c => c.Department).Distinct().CountAsync(),
-                TotalAlerts = await alerts.CountAsync(a => a.Status == AlertStatus.Open),
+                TotalAlerts = openAlerts + activeUsb,
                 CriticalAlerts = await alerts.CountAsync(a => a.Status == AlertStatus.Open && a.Severity == Severity.Critical),
-                HighAlerts = await alerts.CountAsync(a => a.Status == AlertStatus.Open && a.Severity == Severity.High)
+                HighAlerts = await alerts.CountAsync(a => a.Status == AlertStatus.Open && a.Severity == Severity.High) + activeUsb
             };
-        }, TimeSpan.FromSeconds(30));
+        }, TimeSpan.FromSeconds(5));
 
         return Ok(stats);
     }

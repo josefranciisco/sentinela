@@ -45,6 +45,7 @@ try
 
     var builder = Host.CreateApplicationBuilder(args);
     builder.Services.AddSerilog();
+    builder.Services.Configure<HostOptions>(opts => opts.BackgroundServiceExceptionBehavior = BackgroundServiceExceptionBehavior.Ignore);
 
     if (serviceHost)
     {
@@ -52,6 +53,8 @@ try
         {
             options.ServiceName = "SentinelaAgent";
         });
+        // Sessão 0: presença (Online no painel) + launcher do processo interativo (captura/remoto).
+        builder.Services.AddAgentPresenceServices(builder.Configuration);
         builder.Services.AddHostedService<InteractiveSessionLauncher>();
     }
     else

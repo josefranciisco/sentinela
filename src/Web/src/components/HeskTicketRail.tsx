@@ -233,7 +233,7 @@ export function HeskTicketRail() {
             <h2 className="text-sm font-semibold tracking-wide">{t('hesk.title', 'Chamados')}</h2>
           </div>
           <p className="text-[11px] text-muted-foreground">
-            {t('hesk.subtitle', 'Últimos eventos do HESK')}
+            {t('hesk.subtitle', 'Abertos no HESK')}
             {openCount > 0 ? ` · ${openCount} ${t('hesk.open', 'abertos')}` : ''}
           </p>
         </div>
@@ -269,6 +269,7 @@ export function HeskTicketRail() {
               key={ticket.trackId}
               initial={{ opacity: 0, x: 24 }}
               animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 16, height: 0, marginBottom: 0 }}
               transition={{ duration: 0.25 }}
             >
               <TicketCard ticket={ticket} fresh={freshIds.has(ticket.trackId)} />
@@ -286,6 +287,7 @@ export function HeskTicketRail() {
               key={ticket.trackId}
               initial={{ opacity: 0, x: 24 }}
               animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 16 }}
               transition={{ duration: 0.25 }}
             >
               <TicketCard ticket={ticket} fresh={freshIds.has(ticket.trackId)} />

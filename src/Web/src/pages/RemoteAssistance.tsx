@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Dialog, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { Radio, Monitor, PowerOff, Video, VideoOff, Maximize, Minimize, X, Trash2, ChevronDown } from 'lucide-react'
+import { Radio, Monitor, PowerOff, Video, VideoOff, Maximize, Minimize, X, Trash2, ChevronDown, Camera } from 'lucide-react'
 import { api } from '@/lib/api'
 import { hubUrl } from '@/lib/config'
 import { useSignalR } from '@/hooks/useSignalR'
@@ -221,6 +221,14 @@ export function RemoteAssistance() {
     img.src = base64
   }, [])
 
+  const captureScreenshot = useCallback(() => {
+    if (!liveFrame) return
+    const a = document.createElement('a')
+    a.href = liveFrame
+    a.download = `captura-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.jpg`
+    a.click()
+  }, [liveFrame])
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -367,6 +375,14 @@ export function RemoteAssistance() {
                       disabled={!streamActive}
                     >
                       {isRecording ? <><span className="h-2 w-2 rounded-full bg-white animate-pulse mr-1" /> {t('remoteAssistance.stopRecording')}</> : <><Video className="h-4 w-4 mr-1" /> {t('remoteAssistance.record')}</>}
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={captureScreenshot}
+                      disabled={!streamActive}
+                    >
+                      <Camera className="h-4 w-4 mr-1" /> {t('remoteAssistance.screenshot')}
                     </Button>
                     <Button
                       variant="secondary"

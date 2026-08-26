@@ -466,6 +466,19 @@ public class AgentHub : Hub
         await _securityEventRepo.AddAsync(securityEvent);
 
         var computer = await _computerRepo.GetByIdAsync(computerId);
+
+        if (string.Equals(eventType, "USBConnected", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(eventType, "USBDisconnected", StringComparison.OrdinalIgnoreCase))
+        {
+            var tenantId = computer?.TenantId is { } tid && tid != Guid.Empty
+                ? tid
+                : _tenantAccessor.TenantId;
+            if (tenantId != Guid.Empty)
+            {
+                await _cache.RemoveAsync($"dashboard:overview:{tenantId}");
+                await _cache.RemoveAsync($"dashboard:stats:{tenantId}");
+            }
+        }
         var payload = new
         {
             securityEvent.Id,

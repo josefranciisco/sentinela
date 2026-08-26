@@ -670,7 +670,7 @@ export function Dashboard() {
   const [nocMode, setNocMode] = useState(false)
   const [investigatingIncident, setInvestigatingIncident] = useState<any>(null)
   const [refreshing, setRefreshing] = useState(false)
-  const { data: stats, isFetching: statsFetching } = useDashboardStats(autoRefresh)
+  const { data: stats, isFetching: statsFetching } = useDashboardStats(true)
   const { data: incidents, isFetching: incidentsFetching } = useIncidents(5, autoRefresh)
 
   const handleRefresh = async () => {

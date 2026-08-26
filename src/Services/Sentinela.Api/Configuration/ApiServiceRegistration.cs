@@ -128,7 +128,10 @@ public static class ApiServiceRegistration
             client.Timeout = TimeSpan.FromSeconds(8);
         });
         services.Configure<HeskOptions>(configuration.GetSection("Sgm"));
-        services.AddTransient<HeskTicketClient>();
+        services.AddHttpClient<HeskTicketClient>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(10);
+        });
         services.AddSingleton<HeskTicketFeedStore>();
         services.AddHostedService<HeskTicketPoller>();
         services.AddResponseCaching();

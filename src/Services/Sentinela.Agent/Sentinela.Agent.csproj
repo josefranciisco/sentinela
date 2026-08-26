@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <OutputType>WinExe</OutputType>
     <UseWindowsForms>false</UseWindowsForms>
-    <Version>1.0.1</Version>
+    <Version>1.0.2</Version>
     <Product>Sentinela</Product>
     <Company>Mobi</Company>
     <Description>Agente de monitoramento Sentinela</Description>

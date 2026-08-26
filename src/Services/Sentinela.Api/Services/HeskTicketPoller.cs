@@ -40,7 +40,11 @@ public class HeskTicketPoller : BackgroundService
         {
             using var scope = _scopes.CreateScope();
             var client = scope.ServiceProvider.GetRequiredService<HeskTicketClient>();
-            _store.Set(await client.FetchAsync(ct));
+            var next = await client.FetchAsync(ct);
+            if (next.Reachable || !_store.Get().Reachable)
+                _store.Set(next);
+            else
+                _logger.LogWarning("Chamados poll failed ({Error}); keeping last snapshot", next.Error);
         }
         catch (Exception ex)
         {

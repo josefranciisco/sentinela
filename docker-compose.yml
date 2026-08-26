@@ -85,7 +85,9 @@ services:
       Monitoramento__BaseUrl: http://host.docker.internal:8000
       Sgm__ConnectionString: ${SGM_SQL_CONNECTION:-}
       Sgm__AppBaseUrl: ${SGM_APP_BASE_URL:-}
-      Sgm__HeskAdminUrl: http://menu/chamados/admin
+      Sgm__HeskAdminUrl: ${HESK_ADMIN_URL:-http://menu/chamados/admin}
+      Sgm__HeskFeedUrl: ${HESK_FEED_URL:-http://192.168.0.116/chamados/sentinela-feed.php}
+      Sgm__HeskFeedToken: ${HESK_TOKEN:-}
       Sgm__PollSeconds: 8
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -135,6 +137,12 @@ services:
       Cors__Origins__3: https://sentinela.mobi.com
     ports:
        - "5003:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
     depends_on:
       postgres:
         condition: service_healthy
@@ -224,7 +232,10 @@ services:
     ports:
       - "3000:80"
     depends_on:
-      - sentinela-api
+      sentinela-api:
+        condition: service_started
+      sentinela-identity:
+        condition: service_healthy
     networks:
       - sentinela-network
     restart: unless-stopped

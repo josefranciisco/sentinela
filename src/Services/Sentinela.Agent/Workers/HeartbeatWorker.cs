@@ -39,13 +39,6 @@ public class HeartbeatWorker : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            if (!_communication.IsOnline)
-            {
-                try { await Task.Delay(500, stoppingToken); }
-                catch (OperationCanceledException) { break; }
-                continue;
-            }
-
             try
             {
                 var heartbeat = new HeartbeatData

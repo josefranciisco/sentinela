@@ -18,6 +18,9 @@ RUN dotnet publish -c Release -o /app/publish --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
 WORKDIR /app
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
 EXPOSE 8080
 COPY --from=publish /app/publish .
 ENTRYPOINT ["dotnet", "Sentinela.Identity.dll"]

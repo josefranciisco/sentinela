@@ -79,6 +79,9 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   if (response.status === 204) return undefined as T
 
   if (!response.ok) {
+    if (response.status === 502 || response.status === 503 || response.status === 504) {
+      throw new Error('Serviços ainda iniciando. Aguarde alguns segundos e tente de novo.')
+    }
     const error = await response.json().catch(() => ({ message: 'Request failed' }))
     throw new Error(error.message || error.title || 'Request failed')
   }

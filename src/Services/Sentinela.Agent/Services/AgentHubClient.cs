@@ -126,8 +126,21 @@ public class AgentHubClient : IAgentHubClient, IAsyncDisposable
         _connection.Closed += async (error) =>
         {
             _logger.LogWarning(error, "Connection closed");
-            await Task.Delay(_options.ReconnectDelayMs, _reconnectCts.Token);
-            if (!_disposed) await ConnectAsync(ct);
+            // Não usar o CancellationToken do ConnectAsync original — pode já estar cancelado.
+            try
+            {
+                await Task.Delay(_options.ReconnectDelayMs, _reconnectCts.Token);
+                if (!_disposed)
+                    await ConnectAsync(CancellationToken.None);
+            }
+            catch (OperationCanceledException) when (_reconnectCts.IsCancellationRequested)
+            {
+                // disposing
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Reconnect after Closed failed; CommunicationWorker will retry");
+            }
         };
 
         _connection.Reconnected += async (connectionId) =>
