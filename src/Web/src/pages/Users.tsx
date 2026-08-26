@@ -180,6 +180,8 @@ export function Users() {
     u.email.toLowerCase().includes(search.toLowerCase())
   )
 
+  const visibleRoles = roles.filter(r => ['administrador', 'operador'].includes(r.name))
+
   if (loading) {
     return <div className="flex items-center justify-center h-64">Carregando...</div>
   }
@@ -356,7 +358,7 @@ export function Users() {
               <div>
                 <label className="block text-sm font-medium mb-2">Funções</label>
                 <div className="space-y-1">
-                  {roles.map(role => (
+                  {visibleRoles.map(role => (
                     <label key={role.id} className="flex items-center gap-2">
                       <input
                         type="checkbox"
@@ -398,7 +400,7 @@ export function Users() {
               As permissões do usuário são determinadas pelas funções atribuídas
             </p>
             <div className="space-y-1">
-              {roles.map(role => (
+              {visibleRoles.map(role => (
                 <label key={role.id} className="flex items-center gap-2">
                   <input
                     type="checkbox"
