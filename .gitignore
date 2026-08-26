@@ -8,7 +8,6 @@
 !**/.env.example
 bin/
 obj/
-**/dist/
 node_modules/
 .vs/
 .vscode/
@@ -27,7 +26,6 @@ temp/
 *.pdb
 
 obj/
-**/dist/
 node_modules/
 .vs/
 .vscode/
@@ -43,3 +41,5 @@ temp/
 *.dll
 *.exe
 *.pdb
+!dist/agent-setup/**
+!dist/installer/**
