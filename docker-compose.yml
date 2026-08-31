@@ -85,8 +85,8 @@ services:
       Monitoramento__BaseUrl: http://host.docker.internal:8000
       Sgm__ConnectionString: ${SGM_SQL_CONNECTION:-}
       Sgm__AppBaseUrl: ${SGM_APP_BASE_URL:-}
-      Sgm__HeskAdminUrl: ${HESK_ADMIN_URL:-http://menu/chamados/admin}
-      Sgm__HeskFeedUrl: ${HESK_FEED_URL:-http://192.168.0.116/chamados/sentinela-feed.php}
+      Sgm__HeskAdminUrl: ${HESK_ADMIN_URL:-http://mobinet/ti/chamados/admin}
+      Sgm__HeskFeedUrl: ${HESK_FEED_URL:-}
       Sgm__HeskFeedToken: ${HESK_TOKEN:-}
       Sgm__PollSeconds: 8
     extra_hosts:
@@ -246,7 +246,7 @@ services:
     volumes:
       - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     ports:
-      - "80:80"
+      - "8082:80"
     depends_on:
       - sentinela-api
       - sentinela-identity
