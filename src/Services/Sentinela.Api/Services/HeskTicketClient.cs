@@ -277,7 +277,7 @@ public class HeskTicketClient
     {
         var app = _options.AppBaseUrl?.Trim().TrimEnd('/');
         if (!string.IsNullOrWhiteSpace(app))
-            return $"{app}/ti/chamados?id={id}";
+            return $"{app}?id={id}";
 
         if (!string.IsNullOrWhiteSpace(trackHesk))
         {
