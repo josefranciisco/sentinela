@@ -50,3 +50,13 @@ Dockerfile*
 
 # Scripts
 scripts/
+
+# Runtime storage / large local artifacts (not needed in image build)
+**/Storage/
+dist/
+**/dist/
+docs/
+*.mp4
+*.zip
+*.docx
+

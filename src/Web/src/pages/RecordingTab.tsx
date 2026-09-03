@@ -79,6 +79,10 @@ function formatTick(ms: number) {
   return new Date(ms).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 }
 
+async function wait(ms: number) {
+  await new Promise((r) => setTimeout(r, ms))
+}
+
 export function RecordingTab({ computerId, online, monitorCount = 1 }: { computerId: string; online: boolean; monitorCount?: number }) {
   const { t } = useTranslation()
   const { data: status, refetch, isLoading } = useQuery({
@@ -97,7 +101,10 @@ export function RecordingTab({ computerId, online, monitorCount = 1 }: { compute
         isPrimary: index === 0,
       }))
 
-  const [monitorIndex, setMonitorIndex] = useState(0)
+  /** `all` = todos os monitores lado a lado (como no acesso remoto). */
+  const [monitorSelection, setMonitorSelection] = useState<'all' | number>(() =>
+    Math.max(1, monitorCount) > 1 ? 'all' : 0
+  )
   const fromMs = status?.fromUtc ? new Date(status.fromUtc).getTime() : Date.now() - 86_400_000
   const toMs = status?.toUtc ? new Date(status.toUtc).getTime() : Date.now()
   const span = Math.max(60_000, toMs - fromMs)
@@ -106,43 +113,60 @@ export function RecordingTab({ computerId, online, monitorCount = 1 }: { compute
   const [clipFrom, setClipFrom] = useState<number | null>(null)
   const [clipTo, setClipTo] = useState<number | null>(null)
   const [playing, setPlaying] = useState(false)
-  const [frame, setFrame] = useState<string | null>(null)
+  const [frames, setFrames] = useState<{ index: number; name: string; imageBase64: string }[]>([])
   const [loadingFrame, setLoadingFrame] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [exportProgress, setExportProgress] = useState<string | null>(null)
+  const [readyFiles, setReadyFiles] = useState<{ label: string; filename: string; url: string }[]>([])
   const playRef = useRef<number | null>(null)
   const cursorReady = useRef(false)
   const clipReady = useRef(false)
+  const readyFilesRef = useRef<{ url: string }[]>([])
 
   useEffect(() => {
-    if (!monitors.some((m) => m.index === monitorIndex)) {
-      const primary = monitors.find((m) => m.isPrimary)
-      setMonitorIndex(primary?.index ?? monitors[0]?.index ?? 0)
-    }
-  }, [monitors, monitorIndex])
+    readyFilesRef.current = readyFiles
+  }, [readyFiles])
 
   useEffect(() => {
-    if (!status?.toUtc) return
-    const latest = new Date(status.toUtc).getTime()
-    if (!cursorReady.current) {
-      setCursor(latest)
-      cursorReady.current = true
-      void loadFrame(latest, monitorIndex)
+    return () => {
+      readyFilesRef.current.forEach((f) => URL.revokeObjectURL(f.url))
     }
-    if (!clipReady.current && status.fromUtc) {
-      const startBound = new Date(status.fromUtc).getTime()
-      setClipTo(latest)
-      setClipFrom(Math.max(startBound, latest - 5 * 60 * 1000))
-      clipReady.current = true
-    }
-  }, [status?.fromUtc, status?.toUtc, monitorIndex])
+  }, [])
 
-  const loadFrame = async (at: number, monitor = monitorIndex) => {
+  const activeMonitorIndexes = useMemo(() => {
+    if (monitorSelection === 'all') return monitors.map((m) => m.index)
+    return [monitorSelection]
+  }, [monitorSelection, monitors])
+
+  useEffect(() => {
+    if (monitors.length <= 1) {
+      const only = monitors[0]?.index ?? 0
+      if (monitorSelection !== only) setMonitorSelection(only)
+      return
+    }
+    if (monitorSelection === 'all') return
+    if (!monitors.some((m) => m.index === monitorSelection)) {
+      setMonitorSelection('all')
+    }
+  }, [monitors, monitorSelection])
+
+  const loadFrame = async (at: number, indexes: number[] = activeMonitorIndexes) => {
     setLoadingFrame(true)
     try {
-      const data = await api.get<{ imageBase64: string }>(
-        `/computers/${computerId}/recording/frame?at=${new Date(at).toISOString()}&monitorIndex=${monitor}`
+      const results = await Promise.all(
+        indexes.map(async (index) => {
+          const data = await api.get<{ imageBase64: string }>(
+            `/computers/${computerId}/recording/frame?at=${new Date(at).toISOString()}&monitorIndex=${index}`
+          )
+          const mon = monitors.find((m) => m.index === index)
+          return data?.imageBase64
+            ? { index, name: mon?.name || t('computerDetail.recordingMonitorN', { n: index + 1 }), imageBase64: data.imageBase64 }
+            : null
+        })
       )
-      if (data?.imageBase64) setFrame(data.imageBase64)
+      const next = results.filter((x): x is { index: number; name: string; imageBase64: string } => x != null)
+      if (next.length === 0) throw new Error(t('computerDetail.recordingFrameError'))
+      setFrames(next)
     } catch (err: any) {
       setPlaying(false)
       toast.error(err.message || t('computerDetail.recordingFrameError'))
@@ -152,9 +176,25 @@ export function RecordingTab({ computerId, online, monitorCount = 1 }: { compute
   }
 
   useEffect(() => {
-    setFrame(null)
-    if (status?.toUtc || status?.fromUtc) void loadFrame(cursor, monitorIndex)
-  }, [monitorIndex])
+    if (!status?.toUtc) return
+    const latest = new Date(status.toUtc).getTime()
+    if (!cursorReady.current) {
+      setCursor(latest)
+      cursorReady.current = true
+      void loadFrame(latest, activeMonitorIndexes)
+    }
+    if (!clipReady.current && status.fromUtc) {
+      const startBound = new Date(status.fromUtc).getTime()
+      setClipTo(latest)
+      setClipFrom(Math.max(startBound, latest - 5 * 60 * 1000))
+      clipReady.current = true
+    }
+  }, [status?.fromUtc, status?.toUtc])
+
+  useEffect(() => {
+    setFrames([])
+    if (status?.toUtc || status?.fromUtc) void loadFrame(cursor, activeMonitorIndexes)
+  }, [monitorSelection])
 
   useEffect(() => {
     if (!playing) {
@@ -168,14 +208,14 @@ export function RecordingTab({ computerId, online, monitorCount = 1 }: { compute
           setPlaying(false)
           return toMs
         }
-        void loadFrame(next, monitorIndex)
+        void loadFrame(next, activeMonitorIndexes)
         return next
       })
     }, 400)
     return () => {
       if (playRef.current) window.clearInterval(playRef.current)
     }
-  }, [playing, toMs, computerId, monitorIndex])
+  }, [playing, toMs, computerId, monitorSelection])
 
   const clampClip = (start: number, end: number) => {
     let from = Math.min(start, end)
@@ -199,63 +239,154 @@ export function RecordingTab({ computerId, online, monitorCount = 1 }: { compute
 
   const markEnd = () => {
     const start = clipFrom ?? cursor
-    clampClip(Math.min(start, cursor), cursor)
+    clampClip(Math.min(cursor - MIN_CLIP_MS, start), cursor)
     toast.success(t('computerDetail.recordingEndMarked'))
   }
 
   const applyPreset = (minutes: number) => {
-    const end = Math.min(toMs, Math.max(fromMs, cursor))
-    clampClip(Math.max(fromMs, end - minutes * 60 * 1000), end)
+    const end = toMs
+    const start = Math.max(fromMs, end - minutes * 60_000)
+    clampClip(start, end)
+  }
+
+  const clearReadyFiles = () => {
+    setReadyFiles((prev) => {
+      prev.forEach((f) => URL.revokeObjectURL(f.url))
+      return []
+    })
+  }
+
+  const waitUntilExportReady = async (exportId: string, label: string) => {
+    // ffmpeg + upload de trechos longos costuma passar de 3–7 min
+    const deadline = Date.now() + 15 * 60_000
+    while (Date.now() < deadline) {
+      await wait(2000)
+      const st = await api.get<{ status?: string; Status?: string }>(
+        `/computers/${computerId}/recording/exports/${exportId}`
+      )
+      const status = (st.status || st.Status || '').toLowerCase()
+      if (status === 'failed') {
+        throw new Error(
+          t('computerDetail.recordingExportFailedMonitor', 'Falha ao gerar o vídeo de {{name}}.', { name: label })
+        )
+      }
+      if (status === 'ready') return
+      setExportProgress(
+        t('computerDetail.recordingExportWait', 'Gerando {{name}}… isso pode levar alguns minutos.', { name: label })
+      )
+    }
+    throw new Error(
+      t('computerDetail.recordingExportTimeout', 'Tempo esgotado ao gerar o vídeo. Tente um trecho menor.')
+    )
   }
 
   const handleExport = async () => {
     if (clipFrom == null || clipTo == null) {
-      toast.error(t('computerDetail.recordingSelectClip'))
+      toast.error(t('computerDetail.recordingSelectClip', 'Selecione o trecho para baixar.'))
       return
     }
+    const exportIndexes = [...activeMonitorIndexes]
+    if (exportIndexes.length === 0) {
+      toast.error(t('computerDetail.recordingNoMonitors', 'Nenhum monitor disponível para exportar.'))
+      return
+    }
+
+    clearReadyFiles()
     setExporting(true)
+    setExportProgress(
+      exportIndexes.length > 1
+        ? t('computerDetail.recordingExportingN', 'Gerando {{n}} vídeos…', { n: exportIndexes.length })
+        : t('computerDetail.recordingExportingOne', 'Gerando vídeo…')
+    )
+
     try {
-      const started = await api.post<{ exportId: string }>(`/computers/${computerId}/recording/export`, {
-        from: new Date(clipFrom).toISOString(),
-        to: new Date(clipTo).toISOString(),
-        monitorIndex,
-      })
-      const token = useAuthStore.getState().accessToken
-      for (let i = 0; i < 60; i++) {
-        await new Promise((r) => setTimeout(r, 2000))
-        const st = await api.get<{ status: string }>(`/computers/${computerId}/recording/exports/${started.exportId}`)
-        if (st.status === 'failed') throw new Error(t('computerDetail.recordingExportFailed'))
-        if (st.status === 'ready') {
-          const res = await fetch(apiUrl(`/api/v1/computers/${computerId}/recording/exports/${started.exportId}/download`), {
-            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      const fromIso = new Date(clipFrom).toISOString()
+      const toIso = new Date(clipTo).toISOString()
+      const prepared: { label: string; filename: string; url: string }[] = []
+
+      // Sequencial: um monitor por vez (ffmpeg na API é pesado).
+      for (let i = 0; i < exportIndexes.length; i++) {
+        const monitorIndex = exportIndexes[i]
+        const label =
+          monitors.find((m) => m.index === monitorIndex)?.name ||
+          t('computerDetail.recordingMonitorN', { n: monitorIndex + 1 })
+
+        setExportProgress(
+          t('computerDetail.recordingExportProgress', 'Gerando {{name}} ({{current}}/{{total}})…', {
+            name: label,
+            current: i + 1,
+            total: exportIndexes.length,
           })
-          if (!res.ok) throw new Error(t('computerDetail.recordingDownloadError'))
-          const blob = await res.blob()
-          const url = URL.createObjectURL(blob)
-          const a = document.createElement('a')
-          a.href = url
-          a.download = `sentinela-gravacao-${computerId.slice(0, 8)}-m${monitorIndex + 1}.mp4`
-          a.click()
-          URL.revokeObjectURL(url)
-          toast.success(t('computerDetail.recordingDownloaded'))
-          return
+        )
+
+        const started = await api.post<{ exportId?: string; ExportId?: string }>(
+          `/computers/${computerId}/recording/export`,
+          { from: fromIso, to: toIso, monitorIndex }
+        )
+        const exportId = started?.exportId || started?.ExportId
+        if (!exportId) throw new Error(t('computerDetail.recordingExportFailed', 'Falha ao iniciar a exportação.'))
+
+        await waitUntilExportReady(exportId, label)
+
+        setExportProgress(t('computerDetail.recordingFetchingFile', 'Preparando download de {{name}}…', { name: label }))
+        const token = useAuthStore.getState().accessToken
+        const res = await fetch(
+          apiUrl(`/api/v1/computers/${computerId}/recording/exports/${exportId}/download`),
+          { headers: { Authorization: `Bearer ${token}` } }
+        )
+        if (!res.ok) throw new Error(t('computerDetail.recordingDownloadError', 'Erro ao baixar o vídeo.'))
+        const blob = await res.blob()
+        if (!blob || blob.size === 0) {
+          throw new Error(t('computerDetail.recordingDownloadEmpty', 'Arquivo de vídeo vazio.'))
         }
+        const filename = `sentinela-gravacao-${computerId.slice(0, 8)}-m${monitorIndex + 1}.mp4`
+        prepared.push({ label, filename, url: URL.createObjectURL(blob) })
       }
-      toast.error(t('computerDetail.recordingExportTimeout'))
+
+      setReadyFiles(prepared)
+      // Tentativa automática (pode ser bloqueada após espera longa); links abaixo são o fallback.
+      for (let i = 0; i < prepared.length; i++) {
+        const file = prepared[i]
+        const a = document.createElement('a')
+        a.href = file.url
+        a.download = file.filename
+        a.rel = 'noopener'
+        a.style.display = 'none'
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        if (i < prepared.length - 1) await wait(800)
+      }
+
+      toast.success(
+        prepared.length > 1
+          ? t('computerDetail.recordingReadyN', '{{n}} vídeos prontos. Se o download não iniciar, use os botões abaixo.', {
+              n: prepared.length,
+            })
+          : t('computerDetail.recordingReadyOne', 'Vídeo pronto. Se o download não iniciar, use o botão abaixo.')
+      )
     } catch (err: any) {
-      toast.error(err.message || t('computerDetail.recordingDownloadError'))
+      toast.error(err.message || t('computerDetail.recordingDownloadError', 'Erro ao baixar o vídeo.'))
     } finally {
       setExporting(false)
+      setExportProgress(null)
     }
   }
 
-  const selected = monitors.find((m) => m.index === monitorIndex)
-  const monitorOptions = monitors.map((m) => ({
-    value: String(m.index),
-    label: m.width && m.height
-      ? `${m.name} · ${m.width}×${m.height}`
-      : m.name,
-  }))
+  const selectedLabel =
+    monitorSelection === 'all'
+      ? t('remoteAssistance.allMonitors', 'Todos os monitores')
+      : monitors.find((m) => m.index === monitorSelection)?.name
+
+  const monitorOptions = [
+    ...(monitors.length > 1
+      ? [{ value: 'all', label: t('remoteAssistance.allMonitors', 'Todos os monitores') }]
+      : []),
+    ...monitors.map((m) => ({
+      value: String(m.index),
+      label: m.width && m.height ? `${m.name} · ${m.width}×${m.height}` : m.name,
+    })),
+  ]
 
   const rangeStart = clipFrom ?? Math.max(fromMs, toMs - 5 * 60 * 1000)
   const rangeEnd = clipTo ?? toMs
@@ -265,7 +396,10 @@ export function RecordingTab({ computerId, online, monitorCount = 1 }: { compute
   const cursorPct = ((Math.min(toMs, Math.max(fromMs, cursor)) - fromMs) / span) * 100
 
   const recordedRanges = useMemo(() => {
-    const raw = (status?.segments || []).filter((s) => s.monitorIndex === monitorIndex)
+    const raw = (status?.segments || []).filter((s) =>
+      monitorSelection === 'all' ? true : s.monitorIndex === monitorSelection
+    )
+    // When showing all, merge overlapping ranges visually by union of any monitor.
     return raw
       .map((s) => {
         const from = Math.max(fromMs, new Date(s.fromUtc).getTime())
@@ -277,7 +411,7 @@ export function RecordingTab({ computerId, online, monitorCount = 1 }: { compute
         }
       })
       .filter((x): x is { left: number; width: number } => x != null)
-  }, [status?.segments, monitorIndex, fromMs, toMs, span])
+  }, [status?.segments, monitorSelection, fromMs, toMs, span])
 
   const ticks = useMemo(() => hourTicks(fromMs, toMs), [fromMs, toMs])
 
@@ -325,15 +459,44 @@ export function RecordingTab({ computerId, online, monitorCount = 1 }: { compute
         <div className="max-w-sm">
           <Select
             label={t('computerDetail.recordingMonitor')}
-            value={String(monitorIndex)}
-            onChange={(e) => setMonitorIndex(Number(e.target.value))}
+            value={monitorSelection === 'all' ? 'all' : String(monitorSelection)}
+            onChange={(e) => {
+              const v = e.target.value
+              setMonitorSelection(v === 'all' ? 'all' : Number(v))
+            }}
             options={monitorOptions}
           />
         </div>
 
-        <div className="rounded-xl border border-border/60 bg-black/80 min-h-[360px] flex items-center justify-center overflow-hidden">
-          {frame ? (
-            <img alt="" src={`data:image/jpeg;base64,${frame}`} className="max-h-[720px] w-full object-contain" />
+        <div className="rounded-xl border border-border/60 bg-black/80 min-h-[360px] flex items-center justify-center overflow-hidden p-1">
+          {frames.length > 0 ? (
+            <div
+              className={
+                frames.length > 1
+                  ? 'grid w-full gap-1'
+                  : 'flex w-full items-center justify-center'
+              }
+              style={
+                frames.length > 1
+                  ? { gridTemplateColumns: `repeat(${Math.min(frames.length, 2)}, minmax(0, 1fr))` }
+                  : undefined
+              }
+            >
+              {frames.map((f) => (
+                <div key={f.index} className="relative min-w-0">
+                  {frames.length > 1 && (
+                    <span className="absolute left-2 top-2 z-10 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white/90">
+                      {f.name}
+                    </span>
+                  )}
+                  <img
+                    alt={f.name}
+                    src={`data:image/jpeg;base64,${f.imageBase64}`}
+                    className="max-h-[720px] w-full object-contain"
+                  />
+                </div>
+              ))}
+            </div>
           ) : (
             <p className="text-sm text-muted-foreground px-6 text-center">{t('computerDetail.recordingEmpty')}</p>
           )}
@@ -379,7 +542,7 @@ export function RecordingTab({ computerId, online, monitorCount = 1 }: { compute
               onChange={(e) => {
                 const value = Number(e.target.value)
                 setCursor(value)
-                void loadFrame(value, monitorIndex)
+                void loadFrame(value, activeMonitorIndexes)
               }}
               className="absolute inset-0 z-10 w-full cursor-pointer opacity-0"
             />
@@ -398,7 +561,7 @@ export function RecordingTab({ computerId, online, monitorCount = 1 }: { compute
         </div>
         <p className="text-xs text-muted-foreground">
           {t('computerDetail.recordingPlayhead')}: {formatDate(new Date(cursor).toISOString())}
-          {selected ? ` · ${selected.name}` : ''}
+          {selectedLabel ? ` · ${selectedLabel}` : ''}
         </p>
 
         <div className="rounded-lg border border-border/60 p-3 space-y-3">
@@ -447,10 +610,10 @@ export function RecordingTab({ computerId, online, monitorCount = 1 }: { compute
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 items-center">
           <Button
             onClick={() => {
-              if (!playing) void loadFrame(cursor, monitorIndex)
+              if (!playing) void loadFrame(cursor, activeMonitorIndexes)
               setPlaying((p) => !p)
             }}
             disabled={!online || loadingFrame}
@@ -459,9 +622,40 @@ export function RecordingTab({ computerId, online, monitorCount = 1 }: { compute
           </Button>
           <Button variant="outline" onClick={handleExport} disabled={!online || exporting || clipFrom == null}>
             {exporting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Download className="h-4 w-4 mr-1" />}
-            {t('computerDetail.recordingDownload')} ({formatClipLength(clipLength)})
+            {activeMonitorIndexes.length > 1
+              ? t('computerDetail.recordingDownloadN', 'Baixar {{n}} monitores', { n: activeMonitorIndexes.length })
+              : t('computerDetail.recordingDownload')}{' '}
+            ({formatClipLength(clipLength)})
           </Button>
         </div>
+
+        {exportProgress && (
+          <p className="text-sm text-muted-foreground flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+            {exportProgress}
+          </p>
+        )}
+
+        {readyFiles.length > 0 && (
+          <div className="rounded-lg border border-border/60 bg-muted/30 p-3 space-y-2">
+            <p className="text-sm font-medium">
+              {t('computerDetail.recordingReadyTitle', 'Arquivos prontos — clique para baixar:')}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {readyFiles.map((file) => (
+                <a
+                  key={file.url}
+                  href={file.url}
+                  download={file.filename}
+                  className="inline-flex items-center rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent"
+                >
+                  <Download className="h-4 w-4 mr-1.5" />
+                  {file.label}
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   )

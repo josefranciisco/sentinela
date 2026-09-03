@@ -154,6 +154,13 @@ public class RecordingsController : ControllerBase
         if (string.IsNullOrWhiteSpace(exportId) || file is null)
             return BadRequest();
 
+        await _cache.SetAsync(ExportKeyPrefix + exportId, new RecordingExportDto
+        {
+            ExportId = exportId,
+            ComputerId = computerId ?? "",
+            Status = "encoding"
+        }, TimeSpan.FromHours(2));
+
         var dir = Path.Combine(_env.ContentRootPath, "Storage", "Recordings");
         Directory.CreateDirectory(dir);
         var zipPath = Path.Combine(dir, $"{exportId}.zip");

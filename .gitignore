@@ -41,5 +41,5 @@ temp/
 *.dll
 *.exe
 *.pdb
-!dist/agent-setup/**
-!dist/installer/**
+dist/
+docs/
