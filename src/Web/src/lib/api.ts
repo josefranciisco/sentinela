@@ -46,7 +46,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       const refreshResponse = await fetch(`${BASE_URL}/auth/refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken }),
+        body: JSON.stringify({ accessToken, refreshToken }),
       })
 
       if (!refreshResponse.ok) throw new Error('Refresh failed')
